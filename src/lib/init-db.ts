@@ -4,7 +4,6 @@ import { BUILTIN_FEEDS } from './feeds-data'
 import { sql } from 'drizzle-orm'
 
 export async function initDB() {
-  // Create tables
   await db.run(sql`CREATE TABLE IF NOT EXISTS feeds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -35,7 +34,6 @@ export async function initDB() {
     updated_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`)
 
-  // Seed builtin feeds
   for (const feed of BUILTIN_FEEDS) {
     await db.run(sql`INSERT OR IGNORE INTO feeds (name, url, topic, enabled, is_builtin)
       VALUES (${feed.name}, ${feed.url}, ${feed.topic}, 1, 1)`)

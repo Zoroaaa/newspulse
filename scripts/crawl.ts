@@ -12,7 +12,7 @@ const client = createClient({
 })
 const db = drizzle(client, { schema })
 
-const MAX_ARTICLES = Number(process.env.MAX_ARTICLES) || 30
+const PER_FEED_LIMIT = Number(process.env.PER_FEED_LIMIT) || 6
 
 async function main() {
   if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) {
@@ -29,17 +29,17 @@ async function main() {
   }
 
   const enabledFeeds = await db.select().from(schema.feeds).where(eq(schema.feeds.enabled, true))
-  console.log(`Found ${enabledFeeds.length} enabled feeds, max ${MAX_ARTICLES} articles`)
+  console.log(`Found ${enabledFeeds.length} enabled feeds, max ${PER_FEED_LIMIT} per feed`)
 
   let total = 0
   let errors = 0
 
   for (const feed of enabledFeeds) {
-    if (total >= MAX_ARTICLES) break
+    let feedCount = 0
     try {
       const items = await parseFeed(feed.url)
       for (const item of items) {
-        if (total >= MAX_ARTICLES) break
+        if (feedCount >= PER_FEED_LIMIT) break
         if (!item.url) continue
         try {
           const { summary, titleZh } = await generateSummary(item.title, item.summary)
@@ -54,8 +54,9 @@ async function main() {
             topic: feed.topic,
             publishedAt: item.publishedAt,
           }).onConflictDoNothing()
+          feedCount++
           total++
-          console.log(`[${total}/${MAX_ARTICLES}] ${item.title.slice(0, 60)} → ${titleZh}`)
+          console.log(`[${feed.name}] [${feedCount}/${PER_FEED_LIMIT}] ${item.title.slice(0, 60)} → ${titleZh}`)
         } catch (e) {
           errors++
           console.error(`  AI error for ${item.url}:`, e)
