@@ -15,16 +15,15 @@ async function main() {
     process.exit(1)
   }
 
-  const perFeedLimit = Number(process.env.PER_FEED_LIMIT) || 6
   let totalFeeds = 0
 
-  const { total, errors } = await crawlAllFeedsWithProgress(perFeedLimit, (event) => {
+  const { total, errors } = await crawlAllFeedsWithProgress(undefined, (event) => {
     switch (event.type) {
       case 'start':
         totalFeeds = event.totalFeeds
         console.log(`\n📰 NewsPulse Crawler`)
         console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-        console.log(`Found ${event.totalFeeds} enabled feeds (max ${perFeedLimit} articles/feed)`)
+        console.log(`Found ${event.totalFeeds} enabled feeds (max ${event.perFeedLimit} articles/feed)`)
         break
       case 'feed_start':
         console.log(`\n[${event.feedIndex + 1}/${event.totalFeeds}] 📡 ${event.feedName}`)

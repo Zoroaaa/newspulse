@@ -4,12 +4,13 @@ import { eq } from 'drizzle-orm'
 import { parseFeed } from './rss-parser'
 import { generateSummary } from './ai'
 import { initDB } from './init-db'
+import { getConfigNumber } from './config'
 
 const BATCH_SIZE = 5
-const PER_FEED_LIMIT = Number(process.env.PER_FEED_LIMIT) || 6
+const DEFAULT_PER_FEED_LIMIT = 6
 
 export type ProgressEvent =
-  | { type: 'start'; totalFeeds: number }
+  | { type: 'start'; totalFeeds: number; perFeedLimit: number }
   | { type: 'feed_start'; feedName: string; feedIndex: number; totalFeeds: number }
   | { type: 'feed_done'; feedName: string; saved: number; skipped: number; error?: string }
   | { type: 'article'; feedName: string; title: string }
@@ -23,13 +24,15 @@ type ProgressCallback = (event: ProgressEvent) => void
  * @param perFeedLimit 每个 feed 最多抓取的文章数，默认 6
  */
 export async function crawlAllFeedsWithProgress(
-  perFeedLimit = PER_FEED_LIMIT,
+  perFeedLimit?: number,
   onProgress?: ProgressCallback
 ): Promise<{ total: number; errors: number }> {
   await initDB()
+  
+  const actualLimit = perFeedLimit ?? await getConfigNumber('per_feed_limit', DEFAULT_PER_FEED_LIMIT)
   const enabledFeeds = await db.select().from(feeds).where(eq(feeds.enabled, true))
 
-  onProgress?.({ type: 'start', totalFeeds: enabledFeeds.length })
+  onProgress?.({ type: 'start', totalFeeds: enabledFeeds.length, perFeedLimit: actualLimit })
 
   let total = 0
   let errors = 0
@@ -46,10 +49,10 @@ export async function crawlAllFeedsWithProgress(
         let skipped = 0
 
         try {
-          const items = await parseFeed(feed.url, perFeedLimit)
+          const items = await parseFeed(feed.url, actualLimit)
 
           for (const item of items) {
-            if (saved >= perFeedLimit) break
+            if (saved >= actualLimit) break
             if (!item.url || !item.title) continue
 
             onProgress?.({ type: 'article', feedName: feed.name, title: item.title })

@@ -38,4 +38,6 @@ export async function initDB() {
     await db.run(sql`INSERT OR IGNORE INTO feeds (name, url, topic, enabled, is_builtin)
       VALUES (${feed.name}, ${feed.url}, ${feed.topic}, 1, 1)`)
   }
+
+  await db.run(sql`INSERT OR IGNORE INTO config (key, value) VALUES ('per_feed_limit', '6')`)
 }

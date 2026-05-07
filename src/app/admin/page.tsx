@@ -346,6 +346,7 @@ export default function AdminPage() {
                   { key: 'ai_base_url', label: '自定义 Base URL（可选）', type: 'text', placeholder: 'https://your-proxy.com/v1' },
                   { key: 'summary_lang', label: '摘要语言', type: 'select', options: ['zh', 'en', 'keep'] },
                   { key: 'summary_length', label: '摘要长度', type: 'select', options: ['short', 'standard', 'long'] },
+                  { key: 'per_feed_limit', label: '每源最大抓取数', type: 'text', placeholder: '6' },
                   { key: 'retention_days', label: '文章保留天数', type: 'text', placeholder: '30' },
                 ].map(field => (
                   <div key={field.key} style={{ marginBottom: '1rem' }}>
