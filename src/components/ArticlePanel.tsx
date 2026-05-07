@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { titleSimilarity, findRelated } from '@/lib/similarity'
 
 interface Article {
   id: number
@@ -27,6 +28,7 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
   const [state, setState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
   const [result, setResult] = useState<{ titleZh: string; contentZh: string } | null>(null)
   const [related, setRelated] = useState<Article[]>([])
+  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -35,14 +37,23 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
   }, [onClose])
 
   useEffect(() => {
-    fetch(`/api/articles?topic=${encodeURIComponent(article.topic)}&limit=10`)
+    // 重置状态（切换文章时）
+    setState('idle')
+    setResult(null)
+    setRelated([])
+
+    // 拉同topic文章，用shared算法过滤出真正相关（非同一事件）的推荐
+    fetch(`/api/articles?topic=${encodeURIComponent(article.topic)}&limit=30`)
       .then(r => r.json())
       .then(data => {
-        const rows = data.rows || data[article.topic] || []
-        setRelated(rows.filter((a: Article) => a.id !== article.id).slice(0, 5))
+        const rows: Article[] = data.rows || data[article.topic] || []
+        // 同一事件的文章已经在 similar 里了，这里只要"同topic但不同事件"的
+        const sameEventIds = new Set((similar || []).map(a => a.id))
+        const candidates = rows.filter(a => a.id !== article.id && !sameEventIds.has(a.id))
+        setRelated(findRelated(article, candidates, 5))
       })
       .catch(() => {})
-  }, [article.id, article.topic])
+  }, [article.id, article.topic, similar])
 
   const handleTranslate = async () => {
     setState('loading')
@@ -61,13 +72,17 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
     }
   }
 
+  const displayTitle = state === 'done' && result
+    ? result.titleZh
+    : (translated && article.titleZh ? article.titleZh : article.title)
+
   return (
     <>
       <div onClick={onClose} style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 100,
       }} />
 
-      <div className="slide-in" style={{
+      <div ref={panelRef} className="slide-in" style={{
         position: 'fixed', top: 0, right: 0, bottom: 0,
         width: 'min(560px, 100vw)',
         background: 'var(--bg-card)',
@@ -76,6 +91,7 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
         boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
         fontFamily: 'Georgia, serif',
       }}>
+        {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '14px 20px', borderBottom: '0.5px solid var(--border)', flexShrink: 0,
@@ -104,9 +120,10 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
           </div>
         </div>
 
+        {/* Content */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem 1.5rem 2rem' }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.35, marginBottom: '1rem', color: 'var(--text-primary)' }}>
-            {state === 'done' && result ? result.titleZh : (translated && article.titleZh ? article.titleZh : article.title)}
+            {displayTitle}
           </h1>
 
           {article.imageUrl && (
@@ -156,28 +173,34 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
             </div>
           )}
 
+          {/* 多源报道：同一事件，不同媒体 */}
           {similar && similar.length > 0 && (
             <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '0.5px solid var(--border)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: '#185FA5', marginBottom: 12 }}>多源报道（{similar.length + 1}）</div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10, padding: '8px 12px', background: 'rgba(24,95,165,0.06)', borderRadius: 8 }}>
-                {article.source} · 当前来源
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: '#185FA5', marginBottom: 12 }}>
+                多源报道（{similar.length + 1} 家媒体）
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10, padding: '8px 12px', background: 'rgba(24,95,165,0.06)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>{article.source}</span>
+                <span style={{ fontSize: 11, color: '#185FA5' }}>当前来源</span>
               </div>
               {similar.map(a => (
                 <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" style={{
-                  display: 'block', padding: '10px 12px',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                  padding: '10px 12px',
                   borderBottom: '0.5px solid var(--border-light)',
                   textDecoration: 'none', color: 'var(--text-primary)',
-                  borderRadius: 4,
+                  borderRadius: 4, gap: 8,
                 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, marginBottom: 2 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
                     {translated && a.titleZh ? a.titleZh : a.title}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{a.source}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-faint)', whiteSpace: 'nowrap', paddingTop: 2 }}>{a.source}</div>
                 </a>
               ))}
             </div>
           )}
 
+          {/* 相关文章：同topic不同事件 */}
           {related.length > 0 && (
             <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '0.5px solid var(--border)' }}>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 12 }}>相关文章</div>

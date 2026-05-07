@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ArticlePanel from '@/components/ArticlePanel'
+import { isSameEvent } from '@/lib/similarity'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 
@@ -48,19 +49,6 @@ function estimateReadTime(text: string | null): string {
   return `约 ${minutes} 分钟`
 }
 
-function titleWords(title: string): Set<string> {
-  return new Set(title.toLowerCase().replace(/[^\w\u4e00-\u9fff]/g, ' ').split(/\s+/).filter(Boolean))
-}
-
-function wordOverlap(a: string, b: string): number {
-  const wa = titleWords(a)
-  const wb = titleWords(b)
-  if (wa.size === 0 || wb.size === 0) return 0
-  let overlap = 0
-  for (const w of wa) { if (wb.has(w)) overlap++ }
-  return overlap / Math.max(wa.size, wb.size)
-}
-
 export default function HomePage() {
   const [articles, setArticles] = useState<Record<string, Article[]>>({})
   const [style, setStyle] = useState<ViewStyle>('magazine')
@@ -84,25 +72,24 @@ export default function HomePage() {
   const hasMoreRef = useRef<Record<string, boolean>>({})
   const loadingMoreRef = useRef<Set<string>>(new Set())
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
+  // 多源报道映射：使用 shared 算法，阈值统一
   const similarMap = useMemo(() => {
     const all = Object.values(articles).flat()
     const map: Record<number, Article[]> = {}
-    const visited = new Set<number>()
+
     for (let i = 0; i < all.length; i++) {
-      if (visited.has(all[i].id)) continue
       const group: Article[] = [all[i]]
-      for (let j = i + 1; j < all.length; j++) {
-        if (visited.has(all[j].id)) continue
-        if (wordOverlap(all[i].title, all[j].title) > 0.5) {
+      for (let j = 0; j < all.length; j++) {
+        if (i === j) continue
+        if (isSameEvent(all[i], all[j])) {
           group.push(all[j])
-          visited.add(all[j].id)
         }
       }
       if (group.length > 1) {
-        for (const a of group) {
-          map[a.id] = group.filter(x => x.id !== a.id)
-        }
+        map[all[i].id] = group.filter(x => x.id !== all[i].id)
       }
     }
     return map
@@ -126,9 +113,7 @@ export default function HomePage() {
   useEffect(() => {
     fetch('/api/trending?limit=5')
       .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) setTrendingArticles(data)
-      })
+      .then(data => { if (Array.isArray(data)) setTrendingArticles(data) })
       .catch(() => {})
   }, [])
 
@@ -221,6 +206,44 @@ export default function HomePage() {
     setTranslating(false)
   }, [articles, translated, translating])
 
+  // 搜索防抖
+  const handleSearchInput = useCallback((q: string) => {
+    setSearchQuery(q)
+    if (!q.trim()) {
+      setSearchResults([])
+      setSearching(false)
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+      return
+    }
+    setSearching(true)
+    setShowSearch(true)
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+        const data = await res.json()
+        setSearchResults(data.rows || [])
+      } catch {
+        setSearchResults([])
+      }
+      setSearching(false)
+    }, 300)
+  }, [])
+
+  const openSearch = useCallback(() => {
+    setShowSearch(true)
+    setShowBookmarks(false)
+    setTimeout(() => searchInputRef.current?.focus(), 50)
+  }, [])
+
+  const closeSearch = useCallback(() => {
+    setShowSearch(false)
+    setSearchQuery('')
+    setSearchResults([])
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+  }, [])
+
+  // 键盘快捷键 - 面板打开时禁用文章导航
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName
@@ -228,12 +251,7 @@ export default function HomePage() {
 
       if (e.key === 's' || e.key === '/') {
         e.preventDefault()
-        setShowSearch(true)
-        setShowBookmarks(false)
-        setTimeout(() => {
-          const input = document.querySelector<HTMLInputElement>('input[placeholder="搜索文章..."]')
-          input?.focus()
-        }, 50)
+        openSearch()
         return
       }
       if (e.key === 'b') {
@@ -248,12 +266,15 @@ export default function HomePage() {
         return
       }
       if (e.key === 'Escape') {
-        if (showSearch) { setShowSearch(false); setSearchQuery(''); setSearchResults([]); return }
+        if (showSearch) { closeSearch(); return }
         if (showBookmarks) { setShowBookmarks(false); return }
         if (selected) { setSelected(null); return }
         setFocusedId(null)
         return
       }
+      // 面板打开时，j/k/Enter 不响应
+      if (selected) return
+
       if (e.key === 'j') {
         e.preventDefault()
         const flat = Object.values(articles).flat()
@@ -290,13 +311,12 @@ export default function HomePage() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [articles, focusedId, showSearch, showBookmarks, selected, handleTranslateAll, markRead])
+  }, [articles, focusedId, showSearch, showBookmarks, selected, handleTranslateAll, markRead, openSearch, closeSearch])
 
   const loadMore = async (topic: string) => {
     if (loadingMoreRef.current.has(topic)) return
     loadingMoreRef.current.add(topic)
     const offset = articles[topic]?.length || 0
-
     try {
       const res = await fetch(`/api/articles?topic=${encodeURIComponent(topic)}&offset=${offset}&limit=${PAGE_SIZE}`)
       const data = await res.json()
@@ -317,35 +337,13 @@ export default function HomePage() {
     setShowBookmarks(false)
     const el = sectionRefs.current[topicName]
     if (el) {
-      const headerHeight = 52
-      const navHeight = 48
-      const y = el.getBoundingClientRect().top + window.scrollY - headerHeight - navHeight - 8
+      const y = el.getBoundingClientRect().top + window.scrollY - 52 - 48 - 8
       window.scrollTo({ top: y, behavior: 'smooth' })
     }
   }
 
-  const handleSearch = useCallback(async (q: string) => {
-    setSearchQuery(q)
-    if (!q.trim()) {
-      setSearchResults([])
-      setShowSearch(false)
-      return
-    }
-    setSearching(true)
-    setShowSearch(true)
-    try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
-      const data = await res.json()
-      setSearchResults(data.rows || [])
-    } catch {
-      setSearchResults([])
-    }
-    setSearching(false)
-  }, [])
-
   const gridCols = isMobile ? 'repeat(1,1fr)' : style === 'card' ? 'repeat(2,1fr)' : 'repeat(3,1fr)'
   const photoCols = isMobile ? 'repeat(1,1fr)' : 'repeat(3,1fr)'
-
   const topics = Object.keys(articles)
   const topArticle = topics.length > 0 ? articles[topics[0]]?.[0] : null
 
@@ -413,6 +411,7 @@ export default function HomePage() {
       )
     }
 
+    // card / magazine
     return (
       <div key={a.id} ref={setCardRef} tabIndex={-1} onClick={handleClick} className="fade-up" style={{
         background: 'var(--bg-card)', border: '0.5px solid var(--border)', borderRadius: 10,
@@ -483,48 +482,64 @@ export default function HomePage() {
             <button onClick={toggleDarkMode} style={{
               padding: '4px 8px', borderRadius: 6, fontSize: 14,
               border: 'none', background: 'none', cursor: 'pointer',
-              color: 'var(--text-muted)', transition: 'color 0.15s',
+              color: 'var(--text-muted)',
             }}>
               {darkMode ? '☀️' : '🌙'}
             </button>
 
-            {!isMobile && <div style={{ position: 'relative' }}>
-              <input
-                type="text"
-                placeholder="搜索文章..."
-                value={searchQuery}
-                onChange={e => handleSearch(e.target.value)}
-                style={{
-                  width: showSearch ? 180 : 0,
-                  padding: showSearch ? '4px 10px 4px 28px' : '4px 0',
-                  borderRadius: 6,
-                  fontSize: 12,
-                  fontFamily: 'Georgia, serif',
+            {/* 搜索框：独立容器，不用绝对定位覆盖兄弟元素 */}
+            {!isMobile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflow: 'hidden' }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center',
+                  width: showSearch ? 200 : 32,
+                  transition: 'width 0.25s ease',
+                  overflow: 'hidden',
                   border: showSearch ? '0.5px solid var(--border)' : 'none',
+                  borderRadius: 6,
                   background: showSearch ? 'var(--bg-muted)' : 'transparent',
-                  color: 'var(--text-primary)',
-                  outline: 'none',
-                  transition: 'all 0.25s',
-                  opacity: showSearch ? 1 : 0,
-                }}
-              />
-              <button
-                onClick={() => {
-                  if (showSearch && searchQuery) {
-                    setSearchQuery('')
-                    setSearchResults([])
-                    setShowSearch(false)
-                  } else {
-                    setShowSearch(true)
-                  }
-                }}
-                style={{
-                  position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 13, color: showSearch ? '#D85A30' : 'var(--text-muted)', padding: '2px 6px',
-                }}
-              >🔍</button>
-            </div>}
+                }}>
+                  <button
+                    onClick={() => showSearch && !searchQuery ? closeSearch() : openSearch()}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      fontSize: 13, color: showSearch ? '#D85A30' : 'var(--text-muted)',
+                      padding: '4px 6px', flexShrink: 0,
+                    }}
+                  >🔍</button>
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="搜索文章..."
+                    value={searchQuery}
+                    onChange={e => handleSearchInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Escape') closeSearch() }}
+                    style={{
+                      flex: 1,
+                      padding: '4px 8px 4px 0',
+                      fontSize: 12,
+                      fontFamily: 'Georgia, serif',
+                      border: 'none',
+                      background: 'transparent',
+                      color: 'var(--text-primary)',
+                      outline: 'none',
+                      opacity: showSearch ? 1 : 0,
+                      pointerEvents: showSearch ? 'auto' : 'none',
+                      minWidth: 0,
+                    }}
+                  />
+                  {showSearch && searchQuery && (
+                    <button
+                      onClick={closeSearch}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        fontSize: 12, color: 'var(--text-faint)', padding: '4px 6px', flexShrink: 0,
+                      }}
+                    >✕</button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {(['magazine', 'card', 'list', 'photo'] as ViewStyle[]).map(s => (
               <button key={s} onClick={() => setStyle(s)} style={{
@@ -556,6 +571,15 @@ export default function HomePage() {
             }}>
               {translating ? '翻译中...' : translated ? '✓ 已翻译' : '翻译'}
             </button>
+
+            {/* 移动端搜索按钮 */}
+            {isMobile && (
+              <button onClick={showSearch ? closeSearch : openSearch} style={{
+                padding: '4px 8px', borderRadius: 6, fontSize: 14,
+                border: 'none', background: 'none', cursor: 'pointer',
+                color: showSearch ? '#D85A30' : 'var(--text-muted)',
+              }}>🔍</button>
+            )}
           </div>
         </div>
       </header>
@@ -608,12 +632,8 @@ export default function HomePage() {
                   fontWeight: activeTopic === t ? 600 : 400,
                   flexShrink: 0,
                 }}
-                onMouseEnter={e => {
-                  if (activeTopic !== t) e.currentTarget.style.background = 'var(--bg-hover)'
-                }}
-                onMouseLeave={e => {
-                  if (activeTopic !== t) e.currentTarget.style.background = 'transparent'
-                }}
+                  onMouseEnter={e => { if (activeTopic !== t) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                  onMouseLeave={e => { if (activeTopic !== t) e.currentTarget.style.background = 'transparent' }}
                 >
                   {t}
                   <span style={{ marginLeft: 6, fontSize: 11, opacity: activeTopic === t ? 0.8 : 0.5 }}>{count}</span>
@@ -624,22 +644,27 @@ export default function HomePage() {
         </nav>
       )}
 
-      {/* Mobile search */}
+      {/* Mobile search bar */}
       {isMobile && showSearch && (
-        <div style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', padding: '8px 1rem' }}>
+        <div style={{ background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', padding: '8px 1rem', display: 'flex', gap: 8, alignItems: 'center' }}>
           <input
+            ref={searchInputRef}
             type="text"
             placeholder="搜索文章..."
             value={searchQuery}
-            onChange={e => handleSearch(e.target.value)}
+            onChange={e => handleSearchInput(e.target.value)}
             autoFocus
             style={{
-              width: '100%', padding: '8px 12px', borderRadius: 8,
+              flex: 1, padding: '8px 12px', borderRadius: 8,
               fontSize: 14, fontFamily: 'Georgia, serif',
               border: '0.5px solid var(--border)', background: 'var(--bg-muted)',
               color: 'var(--text-primary)', outline: 'none',
             }}
           />
+          <button onClick={closeSearch} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: 18, color: 'var(--text-faint)', padding: '4px 8px',
+          }}>✕</button>
         </div>
       )}
 
@@ -752,7 +777,6 @@ export default function HomePage() {
                   <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{topArticle.source}</span>
                   <span>{timeAgo(topArticle.publishedAt || topArticle.createdAt)}</span>
                   <span style={{ color: 'var(--ai-text)', background: 'var(--ai-tag-bg)', padding: '1px 6px', borderRadius: 4, fontSize: 10 }}>✦ AI摘要</span>
-                  {topArticle.summary && <span style={{ fontSize: 10 }}>{estimateReadTime(topArticle.summary)}</span>}
                 </div>
               </div>
               <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '1.5rem' }}>
@@ -798,9 +822,7 @@ export default function HomePage() {
 
                 {style === 'list' && (
                   <>
-                    <div>
-                      {allArticles.map((a, i) => renderCard(a, i))}
-                    </div>
+                    <div>{allArticles.map((a, i) => renderCard(a, i))}</div>
                     {loadMoreBtn(topic, canLoadMore, isLoading, color)}
                   </>
                 )}
@@ -820,7 +842,14 @@ export default function HomePage() {
       )}
 
       {selected && (
-        <ArticlePanel article={selected} translated={translated} bookmarked={bookmarks.has(selected.id)} onToggleBookmark={() => toggleBookmark(selected.id)} onClose={() => setSelected(null)} similar={similarMap[selected.id]} />
+        <ArticlePanel
+          article={selected}
+          translated={translated}
+          bookmarked={bookmarks.has(selected.id)}
+          onToggleBookmark={() => toggleBookmark(selected.id)}
+          onClose={() => setSelected(null)}
+          similar={similarMap[selected.id]}
+        />
       )}
     </div>
   )
