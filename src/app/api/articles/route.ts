@@ -28,6 +28,18 @@ export async function GET(req: NextRequest) {
         .from(articles)
         .where(eq(articles.topic, topic))
 
+      console.log('[API/articles] Load more sample:', {
+        topic,
+        offset,
+        firstRow: rows[0] ? {
+          id: rows[0].id,
+          publishedAt: rows[0].publishedAt,
+          publishedAtType: typeof rows[0].publishedAt,
+          createdAt: rows[0].createdAt,
+          createdAtType: typeof rows[0].createdAt,
+        } : null
+      })
+
       return NextResponse.json({ rows, hasMore: offset + rows.length < total })
     }
 
@@ -55,13 +67,17 @@ export async function GET(req: NextRequest) {
 
       const result: Record<string, any[]> = {}
       for (const row of ranked) {
-        const { rn, ...article } = row
-        if (article.publishedAt && typeof article.publishedAt === 'number') {
-          article.publishedAt = new Date(article.publishedAt * 1000).toISOString()
+        const { rn, published_at, created_at, title_zh, image_url, feed_id, ...rest } = row
+
+        const article = {
+          ...rest,
+          titleZh: title_zh,
+          imageUrl: image_url,
+          feedId: feed_id,
+          publishedAt: published_at ? (typeof published_at === 'number' ? new Date(published_at * 1000).toISOString() : published_at) : null,
+          createdAt: created_at ? (typeof created_at === 'number' ? new Date(created_at * 1000).toISOString() : created_at) : null,
         }
-        if (article.createdAt && typeof article.createdAt === 'number') {
-          article.createdAt = new Date(article.createdAt * 1000).toISOString()
-        }
+
         if (!result[article.topic]) result[article.topic] = []
         result[article.topic].push(article)
       }
@@ -70,8 +86,21 @@ export async function GET(req: NextRequest) {
       for (const t of topics) {
         ordered[t] = result[t] || []
       }
+
+      console.log('[API/articles] Initial load sample:', {
+        firstTopic: topics[0],
+        firstArticle: ordered[topics[0]]?.[0] ? {
+          id: ordered[topics[0]][0].id,
+          publishedAt: ordered[topics[0]][0].publishedAt,
+          publishedAtType: typeof ordered[topics[0]][0].publishedAt,
+          createdAt: ordered[topics[0]][0].createdAt,
+          createdAtType: typeof ordered[topics[0]][0].createdAt,
+        } : null
+      })
+
       return NextResponse.json(ordered)
-    } catch {
+    } catch (e) {
+      console.error('[API/articles] Window function error, falling back:', e)
       // 回退：N+1，逐 topic 查询（保留原有行为）
       const result: Record<string, any[]> = {}
       for (const t of topics) {

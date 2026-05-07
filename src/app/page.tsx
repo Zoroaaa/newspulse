@@ -37,10 +37,18 @@ const TOPIC_COLORS: Record<string, string> = {
 }
 
 function timeAgo(dateStr: string | null) {
-  if (!dateStr) return ''
+  if (!dateStr) {
+    console.warn('[timeAgo] dateStr is empty:', { dateStr, type: typeof dateStr })
+    return ''
+  }
   try {
-    return formatDistanceToNow(new Date(dateStr), { locale: zhCN, addSuffix: true })
-  } catch {
+    const result = formatDistanceToNow(new Date(dateStr), { locale: zhCN, addSuffix: true })
+    if (!result) {
+      console.warn('[timeAgo] formatDistanceToNow returned empty:', { dateStr, parsedDate: new Date(dateStr) })
+    }
+    return result
+  } catch (e) {
+    console.error('[timeAgo] parse error:', { dateStr, error: e })
     return ''
   }
 }
