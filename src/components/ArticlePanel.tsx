@@ -129,7 +129,15 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
 
           {proxyImageUrl(article.imageUrl) && (
             <img src={proxyImageUrl(article.imageUrl)!} alt="" style={{ width: '100%', borderRadius: 8, marginBottom: '1rem', maxHeight: 240, objectFit: 'cover' }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              onError={(e) => {
+                const img = e.target as HTMLImageElement
+                if (img.dataset.fallback !== 'true' && article.imageUrl && img.src !== article.imageUrl) {
+                  img.dataset.fallback = 'true'
+                  img.src = article.imageUrl
+                } else {
+                  img.style.display = 'none'
+                }
+              }} />
           )}
 
           {article.summary && state !== 'done' && (

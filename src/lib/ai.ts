@@ -30,7 +30,7 @@ function getLengthInstruction(length: string): string {
   return '100字以内'
 }
 
-async function callAI(systemPrompt: string, userContent: string): Promise<string> {
+async function callAI(systemPrompt: string, userContent: string, timeoutMs = 30000): Promise<string> {
   const cfg = await getAIConfig()
   if (!cfg.apiKey) throw new Error('AI API Key not configured')
 
@@ -52,7 +52,7 @@ async function callAI(systemPrompt: string, userContent: string): Promise<string
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }],
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     const data = await res.json()
     return data.content?.[0]?.text || ''
@@ -73,7 +73,7 @@ async function callAI(systemPrompt: string, userContent: string): Promise<string
           { role: 'user', content: userContent },
         ],
       }),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(timeoutMs),
     })
   const data = await res.json()
   return data.choices?.[0]?.message?.content || ''
@@ -112,17 +112,30 @@ export async function translateArticle(title: string, content: string): Promise<
 }
 
 export async function translateTitles(titles: { id: number; title: string }[]): Promise<Record<number, string>> {
-  const result = await callAI(
-    '你是翻译助手。将英文标题翻译为中文。严格返回JSON格式：{"translations":[{"id":1,"zh":"..."},...]}，不要其他内容。',
-    JSON.stringify(titles.map(t => ({ id: t.id, en: t.title })))
-  )
-  try {
-    const clean = result.replace(/```json|```/g, '').trim()
-    const parsed = JSON.parse(clean)
-    const map: Record<number, string> = {}
-    for (const t of parsed.translations || []) map[t.id] = t.zh
-    return map
-  } catch {
-    return {}
+  const BATCH_SIZE = 10
+  const batches: { id: number; title: string }[][] = []
+  for (let i = 0; i < titles.length; i += BATCH_SIZE) {
+    batches.push(titles.slice(i, i + BATCH_SIZE))
   }
+
+  const results = await Promise.all(
+    batches.map(async (batch) => {
+      const result = await callAI(
+        '你是翻译助手。将英文标题翻译为中文。严格返回JSON格式：{"translations":[{"id":1,"zh":"..."},...]}，不要其他内容。',
+        JSON.stringify(batch.map(t => ({ id: t.id, en: t.title }))),
+        60000
+      )
+      try {
+        const clean = result.replace(/```json|```/g, '').trim()
+        const parsed = JSON.parse(clean)
+        const map: Record<number, string> = {}
+        for (const t of parsed.translations || []) map[t.id] = t.zh
+        return map
+      } catch {
+        return {}
+      }
+    })
+  )
+
+  return Object.assign({}, ...results)
 }

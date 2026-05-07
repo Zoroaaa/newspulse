@@ -7,9 +7,14 @@
  */
 export function proxyImageUrl(url: string | null | undefined): string | null {
   if (!url) return null
-  // 已经是代理 URL 了，不处理
   if (url.startsWith('/api/proxy/image')) return url
-  // data: URL 不代理
   if (url.startsWith('data:')) return url
+  if (isLocalHost()) return url
   return `/api/proxy/image?url=${encodeURIComponent(url)}`
+}
+
+function isLocalHost(): boolean {
+  if (typeof window === 'undefined') return false
+  const h = window.location.hostname
+  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]'
 }
