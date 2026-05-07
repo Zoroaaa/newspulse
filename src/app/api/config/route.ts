@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   for (const [key, value] of Object.entries(body)) {
-    if (value === '••••••••') continue // skip masked key
+    if (typeof value === 'string' && value.startsWith('••••••••')) continue
     await db.run(sql`INSERT INTO config (key, value) VALUES (${key}, ${String(value)})
       ON CONFLICT(key) DO UPDATE SET value = ${String(value)}, updated_at = unixepoch()`)
   }
