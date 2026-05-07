@@ -11,7 +11,7 @@ interface AIConfig {
   summaryLength: string
 }
 
-async function getAIConfig(): Promise<AIConfig> {
+export async function getAIConfig(): Promise<AIConfig> {
   const rows = await db.select().from(config)
   const map = Object.fromEntries(rows.map(r => [r.key, r.value]))
   return {
