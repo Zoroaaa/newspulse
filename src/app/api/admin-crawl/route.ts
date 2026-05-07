@@ -14,11 +14,14 @@ export async function POST(req: NextRequest) {
   await initDB()
   const enabledFeeds = await db.select().from(feeds).where(eq(feeds.enabled, true))
   let total = 0
+  const MAX_ARTICLES = 30
 
   for (const feed of enabledFeeds) {
+    if (total >= MAX_ARTICLES) break
     try {
       const items = await parseFeed(feed.url)
       for (const item of items) {
+        if (total >= MAX_ARTICLES) break
         if (!item.url) continue
         try {
           const { summary, titleZh } = await generateSummary(item.title, item.summary)

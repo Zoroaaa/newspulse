@@ -1,0 +1,75 @@
+import { createClient } from '@libsql/client'
+import { drizzle } from 'drizzle-orm/libsql'
+import { eq } from 'drizzle-orm'
+import * as schema from '../src/lib/schema'
+import { parseFeed } from '../src/lib/rss-parser'
+import { generateSummary, getAIConfig } from '../src/lib/ai'
+import { initDB } from '../src/lib/init-db'
+
+const client = createClient({
+  url: process.env.TURSO_DATABASE_URL!,
+  authToken: process.env.TURSO_AUTH_TOKEN!,
+})
+const db = drizzle(client, { schema })
+
+const MAX_ARTICLES = Number(process.env.MAX_ARTICLES) || 30
+
+async function main() {
+  if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) {
+    console.error('Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN')
+    process.exit(1)
+  }
+
+  await initDB()
+
+  const cfg = await getAIConfig()
+  if (!cfg.apiKey) {
+    console.error('AI API Key not configured')
+    process.exit(1)
+  }
+
+  const enabledFeeds = await db.select().from(schema.feeds).where(eq(schema.feeds.enabled, true))
+  console.log(`Found ${enabledFeeds.length} enabled feeds, max ${MAX_ARTICLES} articles`)
+
+  let total = 0
+  let errors = 0
+
+  for (const feed of enabledFeeds) {
+    if (total >= MAX_ARTICLES) break
+    try {
+      const items = await parseFeed(feed.url)
+      for (const item of items) {
+        if (total >= MAX_ARTICLES) break
+        if (!item.url) continue
+        try {
+          const { summary, titleZh } = await generateSummary(item.title, item.summary)
+          await db.insert(schema.articles).values({
+            feedId: feed.id,
+            title: item.title,
+            titleZh,
+            url: item.url,
+            summary,
+            imageUrl: item.imageUrl,
+            source: feed.name,
+            topic: feed.topic,
+            publishedAt: item.publishedAt,
+          }).onConflictDoNothing()
+          total++
+          console.log(`[${total}/${MAX_ARTICLES}] ${item.title.slice(0, 60)} → ${titleZh}`)
+        } catch (e) {
+          errors++
+          console.error(`  AI error for ${item.url}:`, e)
+        }
+      }
+    } catch (e) {
+      console.error(`Feed ${feed.name} failed:`, e)
+    }
+  }
+
+  console.log(`Done: ${total} processed, ${errors} errors`)
+}
+
+main().catch(e => {
+  console.error('Fatal:', e)
+  process.exit(1)
+})

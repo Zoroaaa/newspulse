@@ -52,6 +52,7 @@ async function callAI(systemPrompt: string, userContent: string): Promise<string
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }],
       }),
+      signal: AbortSignal.timeout(30000),
     })
     const data = await res.json()
     return data.content?.[0]?.text || ''
@@ -59,20 +60,21 @@ async function callAI(systemPrompt: string, userContent: string): Promise<string
 
   // OpenAI compatible
   const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${cfg.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: cfg.model,
-      max_tokens: 1024,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
-    }),
-  })
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${cfg.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        max_tokens: 1024,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+      }),
+      signal: AbortSignal.timeout(30000),
+    })
   const data = await res.json()
   return data.choices?.[0]?.message?.content || ''
 }

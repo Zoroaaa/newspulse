@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron",
-      "schedule": "0 8 * * *"
-    }
-  ]
-}
+{"functions": {"src/app/api/admin-crawl/route.ts": {"maxDuration": 120}, "src/app/api/fetch-article/route.ts": {"maxDuration": 60}}}
