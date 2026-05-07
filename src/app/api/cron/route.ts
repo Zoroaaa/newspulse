@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { crawlAllFeedsWithFeedId } from '@/lib/crawl-utils'
 import { db } from '@/lib/db'
-import { feeds, articles } from '@/lib/schema'
-import { eq, and } from 'drizzle-orm'
-import { parseFeed } from '@/lib/rss-parser'
-import { generateSummary } from '@/lib/ai'
-import { initDB } from '@/lib/init-db'
+import { config, articles } from '@/lib/schema'
+import { eq, lt, sql } from 'drizzle-orm'
+
+async function cleanupOldArticles(): Promise<number> {
+  const rows = await db.select().from(config).where(eq(config.key, 'retention_days'))
+  const days = rows.length > 0 ? parseInt(rows[0].value, 10) : 30
+  if (isNaN(days) || days <= 0) return 0
+
+  const cutoff = new Date(Date.now() - days * 86400 * 1000)
+  const result = await db.delete(articles).where(lt(articles.createdAt, cutoff))
+  return result.rowsAffected ?? 0
+}
 
 export async function GET(req: NextRequest) {
   const secret = req.headers.get('x-cron-secret') || req.nextUrl.searchParams.get('secret')
@@ -12,40 +20,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  await initDB()
-  const enabledFeeds = await db.select().from(feeds).where(eq(feeds.enabled, true))
-  let total = 0
-  const MAX_ARTICLES = 30
-
-  for (const feed of enabledFeeds) {
-    if (total >= MAX_ARTICLES) break
-    try {
-      const items = await parseFeed(feed.url)
-      for (const item of items) {
-        if (total >= MAX_ARTICLES) break
-        if (!item.url) continue
-        try {
-          const { summary, titleZh } = await generateSummary(item.title, item.summary)
-          await db.insert(articles).values({
-            feedId: feed.id,
-            title: item.title,
-            titleZh,
-            url: item.url,
-            summary,
-            imageUrl: item.imageUrl,
-            source: feed.name,
-            topic: feed.topic,
-            publishedAt: item.publishedAt,
-          }).onConflictDoNothing()
-          total++
-        } catch {}
-      }
-    } catch (e) {
-      console.error(`Feed ${feed.name} failed:`, e)
-    }
-  }
-
-  return NextResponse.json({ ok: true, processed: total })
+  const [{ total, errors }, cleaned] = await Promise.all([
+    crawlAllFeedsWithFeedId(30),
+    cleanupOldArticles(),
+  ])
+  return NextResponse.json({ ok: true, processed: total, errors, cleaned })
 }
 
 export async function POST(req: NextRequest) {

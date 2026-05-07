@@ -13,6 +13,7 @@ const client = createClient({
 const db = drizzle(client, { schema })
 
 const PER_FEED_LIMIT = Number(process.env.PER_FEED_LIMIT) || 6
+const BATCH_SIZE = 5
 
 async function main() {
   if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) {
@@ -34,36 +35,45 @@ async function main() {
   let total = 0
   let errors = 0
 
-  for (const feed of enabledFeeds) {
-    let feedCount = 0
-    try {
-      const items = await parseFeed(feed.url)
-      for (const item of items) {
-        if (feedCount >= PER_FEED_LIMIT) break
-        if (!item.url) continue
-        try {
-          const { summary, titleZh } = await generateSummary(item.title, item.summary)
-          await db.insert(schema.articles).values({
-            feedId: feed.id,
-            title: item.title,
-            titleZh,
-            url: item.url,
-            summary,
-            imageUrl: item.imageUrl,
-            source: feed.name,
-            topic: feed.topic,
-            publishedAt: item.publishedAt,
-          }).onConflictDoNothing()
-          feedCount++
-          total++
-          console.log(`[${feed.name}] [${feedCount}/${PER_FEED_LIMIT}] ${item.title.slice(0, 60)} → ${titleZh}`)
-        } catch (e) {
-          errors++
-          console.error(`  AI error for ${item.url}:`, e)
+  for (let i = 0; i < enabledFeeds.length; i += BATCH_SIZE) {
+    const batch = enabledFeeds.slice(i, i + BATCH_SIZE)
+    const results = await Promise.allSettled(
+      batch.map(async (feed) => {
+        let feedCount = 0
+        const items = await parseFeed(feed.url)
+        for (const item of items) {
+          if (feedCount >= PER_FEED_LIMIT) break
+          if (!item.url) continue
+          try {
+            const { summary, titleZh } = await generateSummary(item.title, item.summary)
+            await db.insert(schema.articles).values({
+              feedId: feed.id,
+              title: item.title,
+              titleZh,
+              url: item.url,
+              summary,
+              imageUrl: item.imageUrl,
+              source: feed.name,
+              topic: feed.topic,
+              publishedAt: item.publishedAt,
+            }).onConflictDoNothing()
+            feedCount++
+            console.log(`[${feed.name}] [${feedCount}/${PER_FEED_LIMIT}] ${item.title.slice(0, 60)} → ${titleZh}`)
+          } catch (e) {
+            console.error(`  AI error for ${item.url}:`, e)
+            throw e
+          }
         }
+        return feedCount
+      })
+    )
+
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        total += result.value
+      } else {
+        errors++
       }
-    } catch (e) {
-      console.error(`Feed ${feed.name} failed:`, e)
     }
   }
 

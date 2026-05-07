@@ -6,28 +6,69 @@
   --font-serif: 'Georgia', 'Times New Roman', serif;
   --color-accent: #D85A30;
   --color-accent-hover: #C04E26;
+  --bg-page: #f5f3ee;
+  --bg-card: #fff;
+  --bg-hover: #ede9e0;
+  --bg-muted: #f9f7f2;
+  --border: #e0ddd6;
+  --border-light: #eee;
+  --text-primary: #1a1a1a;
+  --text-secondary: #555;
+  --text-muted: #666;
+  --text-faint: #999;
+  --text-white: #fff;
+  --tag-bg: #ede9e0;
+  --ai-bg: #f0faf5;
+  --ai-border: #b2dfdb;
+  --ai-text: #0F6E56;
+  --ai-tag-bg: #E1F5EE;
+  --success-bg: #e8f5e9;
+  --success-text: #2e7d32;
+  --error-bg: #fff5f5;
+  --error-border: #ffcdd2;
+  --error-text: #c62828;
+  --scrollbar-thumb: #ccc;
+}
+
+.dark {
+  --bg-page: #111;
+  --bg-card: #1a1a1a;
+  --bg-hover: #2a2a2a;
+  --bg-muted: #222;
+  --border: #333;
+  --border-light: #2a2a2a;
+  --text-primary: #e8e5de;
+  --text-secondary: #bbb;
+  --text-muted: #999;
+  --text-faint: #777;
+  --text-white: #fff;
+  --tag-bg: #2a2a2a;
+  --ai-bg: #1a2a24;
+  --ai-border: #2a3a34;
+  --ai-text: #5cb89a;
+  --ai-tag-bg: #1a2a24;
+  --success-bg: #1a2a1a;
+  --success-text: #5cb85c;
+  --error-bg: #2a1a1a;
+  --error-border: #3a2a2a;
+  --error-text: #e57373;
+  --scrollbar-thumb: #555;
 }
 
 * { box-sizing: border-box; }
 
 body {
   font-family: var(--font-serif);
-  background: #f5f3ee;
-  color: #1a1a1a;
+  background: var(--bg-page);
+  color: var(--text-primary);
   min-height: 100vh;
+  transition: background 0.3s, color 0.3s;
 }
 
-.dark body {
-  background: #111;
-  color: #e8e5de;
-}
-
-/* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #ccc; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
 
-/* Article panel slide-in */
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
@@ -35,10 +76,16 @@ body {
 
 .slide-in { animation: slideIn 0.25s ease; }
 
-/* Fade in cards */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .fade-up { animation: fadeUp 0.3s ease both; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.skeleton { animation: pulse 1.5s ease-in-out infinite; background: var(--bg-hover); border-radius: 6px; }

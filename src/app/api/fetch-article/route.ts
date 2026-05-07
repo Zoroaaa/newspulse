@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import * as cheerio from 'cheerio'
 import { translateArticle } from '@/lib/ai'
 
 export async function POST(req: NextRequest) {
@@ -6,7 +7,6 @@ export async function POST(req: NextRequest) {
   if (!url) return NextResponse.json({ error: 'url required' }, { status: 400 })
 
   try {
-    // Fetch article via server-side (bypasses CORS)
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; NewsPulse/1.0)',
@@ -18,14 +18,28 @@ export async function POST(req: NextRequest) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const html = await res.text()
 
-    // Extract text content (basic extraction without cheerio server-side import issues)
-    const text = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 8000)
+    const $ = cheerio.load(html)
+
+    $('script, style, nav, header, footer, aside, iframe, noscript, [role="navigation"], [role="banner"], [role="contentinfo"]').remove()
+
+    let contentEl = $('article').first()
+    if (!contentEl.length) contentEl = $('[role="main"]').first()
+    if (!contentEl.length) contentEl = $('main').first()
+    if (!contentEl.length) contentEl = $('.post-content, .article-content, .entry-content, .story-body, .article__body').first()
+    if (!contentEl.length) contentEl = $('body')
+
+    const paragraphs: string[] = []
+    contentEl.find('p, h1, h2, h3, h4, h5, h6').each((_, el) => {
+      const text = $(el).text().trim()
+      if (text.length > 20) paragraphs.push(text)
+    })
+
+    let text = paragraphs.join('\n\n')
+    if (text.length < 100) {
+      text = contentEl.text().replace(/\s+/g, ' ').trim()
+    }
+
+    text = text.slice(0, 8000)
 
     const { titleZh, contentZh } = await translateArticle(title, text)
     return NextResponse.json({ titleZh, contentZh, originalUrl: url })

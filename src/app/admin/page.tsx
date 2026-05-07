@@ -25,6 +25,7 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false)
   const [crawling, setCrawling] = useState(false)
   const [msg, setMsg] = useState('')
+  const [importing, setImporting] = useState(false)
 
   const login = async () => {
     const res = await fetch('/api/admin-login', {
@@ -87,6 +88,41 @@ export default function AdminPage() {
       setMsg('抓取失败，请检查 AI 配置')
     }
     setCrawling(false)
+    setTimeout(() => setMsg(''), 5000)
+  }
+
+  const exportOpml = async () => {
+    const res = await fetch('/api/opml')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'newspulse-feeds.opml'
+    a.click()
+    URL.revokeObjectURL(url)
+    setMsg('OPML 导出成功')
+    setTimeout(() => setMsg(''), 2000)
+  }
+
+  const importOpml = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    const text = await file.text()
+    try {
+      const res = await fetch('/api/opml', { method: 'POST', body: text, headers: { 'Content-Type': 'application/xml' } })
+      const data = await res.json()
+      if (data.ok) {
+        setMsg(`导入完成：${data.imported} 个新源，${data.skipped} 个跳过`)
+        fetch('/api/feeds').then(r => r.json()).then(setFeeds)
+      } else {
+        setMsg(`导入失败：${data.error}`)
+      }
+    } catch {
+      setMsg('导入失败')
+    }
+    setImporting(false)
+    e.target.value = ''
     setTimeout(() => setMsg(''), 5000)
   }
 
@@ -183,7 +219,16 @@ export default function AdminPage() {
 
               {/* Add feed */}
               <div style={{ background: '#fff', border: '0.5px solid #e0ddd6', borderRadius: 10, padding: '1.25rem', marginBottom: '1rem' }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: '1rem' }}>新增源</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>新增源</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={exportOpml} style={{ padding: '5px 14px', background: '#639922', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontFamily: 'Georgia, serif' }}>导出 OPML</button>
+                    <label style={{ padding: '5px 14px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, cursor: 'pointer', fontFamily: 'Georgia, serif', display: 'inline-block' }}>
+                      {importing ? '导入中...' : '导入 OPML'}
+                      <input type="file" accept=".opml,.xml" onChange={importOpml} style={{ display: 'none' }} disabled={importing} />
+                    </label>
+                  </div>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr 1fr', gap: 8, marginBottom: 8 }}>
                   <input placeholder="名称" value={newFeed.name} onChange={e => setNewFeed(p => ({ ...p, name: e.target.value }))}
                     style={{ padding: '8px 10px', borderRadius: 8, border: '0.5px solid #ccc', fontSize: 13, fontFamily: 'Georgia, serif' }} />
@@ -234,6 +279,7 @@ export default function AdminPage() {
                   { key: 'ai_base_url', label: '自定义 Base URL（可选）', type: 'text', placeholder: 'https://your-proxy.com/v1' },
                   { key: 'summary_lang', label: '摘要语言', type: 'select', options: ['zh', 'en', 'keep'] },
                   { key: 'summary_length', label: '摘要长度', type: 'select', options: ['short', 'standard', 'long'] },
+                  { key: 'retention_days', label: '文章保留天数', type: 'text', placeholder: '30' },
                 ].map(field => (
                   <div key={field.key} style={{ marginBottom: '1rem' }}>
                     <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 6 }}>{field.label}</label>
