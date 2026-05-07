@@ -40,9 +40,8 @@ export default function AdminPage() {
     if (!authed) return
     fetch('/api/feeds').then(r => r.json()).then(setFeeds)
     fetch('/api/config').then(r => r.json()).then(setConfig)
-    fetch('/api/articles').then(r => r.json()).then(data => {
-      const total = Object.values(data as Record<string, any[]>).reduce((s, a) => s + a.length, 0)
-      setStats(prev => ({ ...prev, articles: total }))
+    fetch('/api/articles?count=true').then(r => r.json()).then(data => {
+      setStats(prev => ({ ...prev, articles: data.total || 0 }))
     })
   }, [authed])
 

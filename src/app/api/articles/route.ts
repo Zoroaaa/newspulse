@@ -9,8 +9,14 @@ export async function GET(req: NextRequest) {
   const topic = req.nextUrl.searchParams.get('topic')
   const offset = parseInt(req.nextUrl.searchParams.get('offset') || '0')
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get('limit') || String(DEFAULT_LIMIT)), 50)
+  const countOnly = req.nextUrl.searchParams.get('count') === 'true'
 
   try {
+    if (countOnly) {
+      const [{ total }] = await db.select({ total: count() }).from(articles)
+      return NextResponse.json({ total })
+    }
+
     if (topic) {
       const rows = await db.select().from(articles)
         .where(eq(articles.topic, topic))
