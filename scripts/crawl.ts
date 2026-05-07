@@ -16,31 +16,45 @@ async function main() {
   }
 
   const perFeedLimit = Number(process.env.PER_FEED_LIMIT) || 6
-  console.log(`Starting crawl: max ${perFeedLimit} articles per feed`)
+  let totalFeeds = 0
 
   const { total, errors } = await crawlAllFeedsWithProgress(perFeedLimit, (event) => {
     switch (event.type) {
       case 'start':
-        console.log(`Found ${event.totalFeeds} enabled feeds`)
+        totalFeeds = event.totalFeeds
+        console.log(`\n📰 NewsPulse Crawler`)
+        console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+        console.log(`Found ${event.totalFeeds} enabled feeds (max ${perFeedLimit} articles/feed)`)
         break
       case 'feed_start':
-        console.log(`\n[${event.feedIndex + 1}/${event.totalFeeds}] ${event.feedName}`)
+        console.log(`\n[${event.feedIndex + 1}/${event.totalFeeds}] 📡 ${event.feedName}`)
         break
       case 'article':
-        console.log(`  → ${event.title.slice(0, 80)}`)
+        console.log(`   ├─ ${event.title.slice(0, 70)}${event.title.length > 70 ? '...' : ''}`)
         break
       case 'feed_done':
-        console.log(`  ✓ saved:${event.saved} skipped:${event.skipped}${event.error ? ` error:${event.error}` : ''}`)
+        if (event.error) {
+          console.log(`   └─ ❌ FAILED: ${event.error}`)
+        } else {
+          console.log(`   └─ ✅ saved:${event.saved} skipped:${event.skipped}`)
+        }
         break
       case 'error':
-        console.error(`  ✗ ${event.message}`)
+        console.error(`   ⚠️  ${event.message}`)
         break
       case 'done':
         break
     }
   })
 
-  console.log(`\nDone: ${total} processed, ${errors} errors`)
+  const successRate = totalFeeds > 0 ? (((totalFeeds - errors) / totalFeeds) * 100).toFixed(1) : '0.0'
+  
+  console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
+  console.log(`📊 Summary:`)
+  console.log(`   Total articles processed: ${total}`)
+  console.log(`   Feeds with errors: ${errors}`)
+  console.log(`   Success rate: ${successRate}%`)
+  console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
   process.exit(errors > 0 ? 1 : 0)
 }
 

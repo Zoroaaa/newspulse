@@ -46,7 +46,7 @@ export async function crawlAllFeedsWithProgress(
         let skipped = 0
 
         try {
-          const items = await parseFeed(feed.url)
+          const items = await parseFeed(feed.url, perFeedLimit)
 
           for (const item of items) {
             if (saved >= perFeedLimit) break
