@@ -25,6 +25,7 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false)
   const [crawling, setCrawling] = useState(false)
   const [msg, setMsg] = useState('')
+  const [crawlLog, setCrawlLog] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
 
   const login = async () => {
@@ -79,11 +80,49 @@ export default function AdminPage() {
 
   const triggerCrawl = async () => {
     setCrawling(true)
-    setMsg('抓取中，请稍候（每个源需要几秒）...')
+    setCrawlLog([])
+    setMsg('')
     try {
       const res = await fetch('/api/admin-crawl', { method: 'POST' })
-      const data = await res.json()
-      setMsg(`完成，处理 ${data.processed || 0} 篇`)
+      if (!res.ok || !res.body) throw new Error('request failed')
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let totalSaved = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const evt = JSON.parse(line.slice(6))
+            if (evt.type === 'start') {
+              setCrawlLog([`开始抓取，共 ${evt.totalFeeds} 个源`])
+            } else if (evt.type === 'feed_start') {
+              setCrawlLog(prev => [...prev, `[${evt.feedIndex + 1}/${evt.totalFeeds}] ${evt.feedName}...`])
+            } else if (evt.type === 'feed_done') {
+              const parts = [`✓ ${evt.feedName}: 存 ${evt.saved} 篇`]
+              if (evt.skipped) parts.push(`跳过 ${evt.skipped}`)
+              if (evt.deduped) parts.push(`去重 ${evt.deduped}`)
+              if (evt.error) parts.push(`错误: ${evt.error}`)
+              setCrawlLog(prev => [...prev, parts.join('，')])
+              totalSaved += evt.saved || 0
+            } else if (evt.type === 'done') {
+              setCrawlLog(prev => [...prev, `完成，共入库 ${totalSaved} 篇`])
+            } else if (evt.type === 'error') {
+              setCrawlLog(prev => [...prev, `错误: ${evt.message}`])
+            }
+          } catch {}
+        }
+      }
+      setMsg('抓取完成')
     } catch {
       setMsg('抓取失败，请检查 AI 配置')
     }
@@ -208,6 +247,20 @@ export default function AdminPage() {
                   padding: '8px 20px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 8,
                   fontSize: 13, cursor: crawling ? 'default' : 'pointer', fontFamily: 'Georgia, serif',
                 }}>{crawling ? '抓取中...' : '立即抓取所有源'}</button>
+                {crawlLog.length > 0 && (
+                  <div style={{
+                    marginTop: '1rem', padding: '10px 12px', borderRadius: 8,
+                    background: '#f8f7f4', border: '0.5px solid #e8e6e0',
+                    fontFamily: 'Menlo, Consolas, monospace', fontSize: 12, lineHeight: 1.8,
+                    maxHeight: 240, overflowY: 'auto', color: '#444',
+                  }}>
+                    {crawlLog.map((line, i) => (
+                      <div key={i} style={{
+                        color: line.startsWith('✓') ? '#2e7d32' : line.startsWith('错误') ? '#c62828' : '#555',
+                      }}>{line}</div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

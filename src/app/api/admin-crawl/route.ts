@@ -1,11 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/auth'
-import { crawlAllFeedsWithFeedId } from '@/lib/crawl-utils'
+import { crawlAllFeedsWithProgress } from '@/lib/crawl-utils'
+
+export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
   const auth = requireAdmin(req)
   if (auth) return auth
 
-  const { total, errors } = await crawlAllFeedsWithFeedId(30)
-  return NextResponse.json({ ok: true, processed: total, errors })
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: object) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+      }
+
+      try {
+        await crawlAllFeedsWithProgress(30, send)
+        send({ type: 'done' })
+      } catch (e) {
+        send({ type: 'error', message: String(e) })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    },
+  })
 }
