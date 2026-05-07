@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ArticlePanel from '@/components/ArticlePanel'
 import { isSameEvent } from '@/lib/similarity'
-import { proxyImageUrl } from '@/lib/proxy'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 
@@ -393,16 +392,8 @@ export default function HomePage() {
     if (style === 'photo') {
       return (
         <div key={a.id} ref={setCardRef} tabIndex={-1} onClick={handleClick} style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', position: 'relative', aspectRatio: '16/10', background: 'var(--border)', outline: 'none', boxShadow: focusRing }}>
-          {proxyImageUrl(a.imageUrl) ? (
-            <img src={proxyImageUrl(a.imageUrl)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isRead ? 0.7 : 1 }} onError={(e) => {
-              const img = e.target as HTMLImageElement
-              if (img.dataset.fallback !== 'true' && a.imageUrl && img.src !== a.imageUrl) {
-                img.dataset.fallback = 'true'
-                img.src = a.imageUrl
-              } else {
-                img.style.display = 'none'
-              }
-            }} />
+          {a.imageUrl ? (
+            <img src={a.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isRead ? 0.7 : 1 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
           ) : (
             <div style={{ width: '100%', height: '100%', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{a.source}</span>
@@ -771,19 +762,11 @@ export default function HomePage() {
               borderBottom: '1px solid var(--border)',
             }}>
               <div style={{ cursor: 'pointer' }} onClick={() => { setSelected(topArticle); markRead(topArticle.id) }}>
-                {proxyImageUrl(topArticle.imageUrl) && (
-                  <img src={proxyImageUrl(topArticle.imageUrl)!} alt="" style={{
+                {topArticle.imageUrl && (
+                  <img src={topArticle.imageUrl} alt="" style={{
                     width: '100%', height: 180, objectFit: 'cover',
                     borderRadius: 8, marginBottom: 12,
-                  }} onError={(e) => {
-                    const img = e.target as HTMLImageElement
-                    if (img.dataset.fallback !== 'true' && topArticle.imageUrl && img.src !== topArticle.imageUrl) {
-                      img.dataset.fallback = 'true'
-                      img.src = topArticle.imageUrl
-                    } else {
-                      img.style.display = 'none'
-                    }
-                  }} />
+                  }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                 )}
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: '#D85A30', marginBottom: 6 }}>{topArticle.topic}</div>
                 <h2 style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.3, marginBottom: 10, color: 'var(--text-primary)' }}>
