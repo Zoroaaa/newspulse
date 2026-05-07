@@ -56,6 +56,12 @@ export async function GET(req: NextRequest) {
       const result: Record<string, any[]> = {}
       for (const row of ranked) {
         const { rn, ...article } = row
+        if (article.publishedAt && typeof article.publishedAt === 'number') {
+          article.publishedAt = new Date(article.publishedAt * 1000).toISOString()
+        }
+        if (article.createdAt && typeof article.createdAt === 'number') {
+          article.createdAt = new Date(article.createdAt * 1000).toISOString()
+        }
         if (!result[article.topic]) result[article.topic] = []
         result[article.topic].push(article)
       }

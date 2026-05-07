@@ -408,7 +408,10 @@ export default function HomePage() {
             padding: '24px 10px 10px',
           }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', lineHeight: 1.3, opacity: isRead ? 0.7 : 1 }}>{title}</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>{a.source}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>{a.source}</span>
+              <span>{timeAgo(a.publishedAt || a.createdAt)}</span>
+            </div>
           </div>
         </div>
       )
