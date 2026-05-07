@@ -31,6 +31,9 @@ const TOPIC_COLORS: Record<string, string> = {
   '国际': '#D85A30',
   '财经': '#639922',
   '科学': '#7B3FF2',
+  'AI': '#0D9488',
+  '深度': '#B45309',
+  '开发': '#4338CA',
 }
 
 function timeAgo(dateStr: string | null) {
@@ -447,19 +450,27 @@ export default function HomePage() {
     )
   }
 
+  const hexToRgba = (hex: string, alpha: number) => {
+    const r = parseInt(hex.slice(1, 3), 16)
+    const g = parseInt(hex.slice(3, 5), 16)
+    const b = parseInt(hex.slice(5, 7), 16)
+    return `rgba(${r},${g},${b},${alpha})`
+  }
+
   const loadMoreBtn = (topic: string, canLoadMore: boolean, isLoading: boolean, color: string) => {
     if (!canLoadMore) return null
     return (
       <button onClick={() => loadMore(topic)} disabled={isLoading} style={{
-        width: '100%', marginTop: 12, padding: '8px',
-        background: 'var(--bg-card)',
-        border: '0.5px solid var(--border)',
+        width: '100%', marginTop: 12, padding: '8px 12px',
+        background: hexToRgba(color, 0.06),
+        border: `1px solid ${hexToRgba(color, 0.25)}`,
         borderRadius: 8,
         fontSize: 13,
         fontFamily: 'Georgia, serif',
         color: color,
         cursor: isLoading ? 'default' : 'pointer',
         opacity: isLoading ? 0.6 : 1,
+        transition: 'background 0.2s, border-color 0.2s',
       }}>
         {isLoading ? '加载中...' : '↓ 查看更多'}
       </button>

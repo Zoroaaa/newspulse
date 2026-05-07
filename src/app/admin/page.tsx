@@ -15,6 +15,7 @@ type AdminSection = 'dashboard' | 'feeds' | 'ai' | 'topics'
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
+  const [checking, setChecking] = useState(true)
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState('')
   const [section, setSection] = useState<AdminSection>('dashboard')
@@ -27,6 +28,12 @@ export default function AdminPage() {
   const [msg, setMsg] = useState('')
   const [crawlLog, setCrawlLog] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin-login').then(r => {
+      if (r.ok) setAuthed(true)
+    }).finally(() => setChecking(false))
+  }, [])
 
   const login = async () => {
     const res = await fetch('/api/admin-login', {
@@ -110,7 +117,6 @@ export default function AdminPage() {
             } else if (evt.type === 'feed_done') {
               const parts = [`✓ ${evt.feedName}: 存 ${evt.saved} 篇`]
               if (evt.skipped) parts.push(`跳过 ${evt.skipped}`)
-              if (evt.deduped) parts.push(`去重 ${evt.deduped}`)
               if (evt.error) parts.push(`错误: ${evt.error}`)
               setCrawlLog(prev => [...prev, parts.join('，')])
               totalSaved += evt.saved || 0
@@ -168,6 +174,14 @@ export default function AdminPage() {
   const topics = [...new Set(feeds.map(f => f.topic))]
 
   // Login screen
+  if (checking) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f3ee', fontFamily: 'Georgia, serif' }}>
+        <div style={{ fontSize: 14, color: '#999' }}>验证中...</div>
+      </div>
+    )
+  }
+
   if (!authed) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f3ee', fontFamily: 'Georgia, serif' }}>

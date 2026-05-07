@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       }
 
       try {
-        await crawlAllFeedsWithProgress(30, send)
+        await crawlAllFeedsWithProgress(undefined, send)
         send({ type: 'done' })
       } catch (e) {
         send({ type: 'error', message: String(e) })

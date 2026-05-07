@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   }
 
   const [{ total, errors }, cleaned] = await Promise.all([
-    crawlAllFeedsWithFeedId(30),
+    crawlAllFeedsWithFeedId(),
     cleanupOldArticles(),
   ])
   return NextResponse.json({ ok: true, processed: total, errors, cleaned })
