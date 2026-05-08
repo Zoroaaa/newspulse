@@ -56,6 +56,19 @@ export async function initDB() {
   await db.run(sql`CREATE INDEX IF NOT EXISTS idx_article_views_article_id
     ON article_views (article_id)`)
 
+  await db.run(sql`CREATE INDEX IF NOT EXISTS idx_article_views_viewed_at
+    ON article_views (viewed_at)`)
+
+  await db.run(sql`CREATE TABLE IF NOT EXISTS site_access_stats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    visited_at INTEGER NOT NULL DEFAULT (unixepoch()),
+    user_agent TEXT,
+    referrer TEXT
+  )`)
+
+  await db.run(sql`CREATE INDEX IF NOT EXISTS idx_site_access_stats_visited_at
+    ON site_access_stats (visited_at)`)
+
   await db.run(sql`CREATE TABLE IF NOT EXISTS config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,

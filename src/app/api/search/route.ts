@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { articles } from '@/lib/schema'
-import { desc, or, like, and, eq } from 'drizzle-orm'
+import { articles, articleViews } from '@/lib/schema'
+import { desc, or, like, and, eq, sql, getTableColumns } from 'drizzle-orm'
 
 export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get('q')?.trim()
@@ -24,7 +24,10 @@ export async function GET(req: NextRequest) {
       ? and(eq(articles.topic, topic), or(...conditions))
       : or(...conditions)
 
-    const rows = await db.select().from(articles)
+    const rows = await db.select({
+      ...getTableColumns(articles),
+      viewCount: sql<number>`(SELECT COUNT(*) FROM article_views WHERE article_id = ${articles.id})`
+    }).from(articles)
       .where(where!)
       .orderBy(desc(articles.createdAt))
       .limit(limit)

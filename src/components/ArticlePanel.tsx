@@ -13,6 +13,7 @@ interface Article {
   source: string
   topic: string
   publishedAt: string | null
+  viewCount?: number
 }
 
 interface Props {
@@ -93,6 +94,12 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 11, background: 'var(--tag-bg)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 4 }}>{article.topic}</span>
             <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>{article.source}</span>
+            {article.viewCount !== undefined && article.viewCount > 0 && (
+              <span style={{ fontSize: 11, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 2 }}>
+                <span>👁</span>
+                <span>{article.viewCount}</span>
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button onClick={onToggleBookmark} style={{

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { articles } from '@/lib/schema'
-import { desc, eq, count, inArray, sql } from 'drizzle-orm'
+import { articles, articleViews } from '@/lib/schema'
+import { desc, eq, count, inArray, sql, getTableColumns } from 'drizzle-orm'
 
 const DEFAULT_LIMIT = 6
 
@@ -18,7 +18,10 @@ export async function GET(req: NextRequest) {
     }
 
     if (topic) {
-      const rows = await db.select().from(articles)
+      const rows = await db.select({
+        ...getTableColumns(articles),
+        viewCount: sql<number>`(SELECT COUNT(*) FROM article_views WHERE article_id = ${articles.id})`
+      }).from(articles)
         .where(eq(articles.topic, topic))
         .orderBy(desc(articles.publishedAt), desc(articles.createdAt))
         .limit(limit)
@@ -42,26 +45,27 @@ export async function GET(req: NextRequest) {
     // 若不支持则回退到多次查询
     try {
       const ranked = await db.all(sql`
-        SELECT * FROM (
-          SELECT *, ROW_NUMBER() OVER (
-            PARTITION BY topic
-            ORDER BY COALESCE(published_at, created_at) DESC
+        SELECT 
+          a.*, 
+          (SELECT COUNT(*) FROM article_views WHERE article_id = a.id) as view_count,
+          ROW_NUMBER() OVER (
+            PARTITION BY a.topic
+            ORDER BY COALESCE(a.published_at, a.created_at) DESC
           ) as rn
-          FROM articles
-        ) ranked
-        WHERE rn <= ${DEFAULT_LIMIT}
-        ORDER BY topic, rn
+        FROM articles a
       `) as any[]
 
       const result: Record<string, any[]> = {}
       for (const row of ranked) {
-        const { rn, published_at, created_at, title_zh, image_url, feed_id, ...rest } = row
+        if (row.rn > DEFAULT_LIMIT) continue
+        const { rn, published_at, created_at, title_zh, image_url, feed_id, view_count, ...rest } = row
 
         const article = {
           ...rest,
           titleZh: title_zh,
           imageUrl: image_url,
           feedId: feed_id,
+          viewCount: view_count,
           publishedAt: published_at ? (typeof published_at === 'number' ? new Date(published_at * 1000).toISOString() : published_at) : null,
           createdAt: created_at ? (typeof created_at === 'number' ? new Date(created_at * 1000).toISOString() : created_at) : null,
         }

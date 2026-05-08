@@ -38,3 +38,10 @@ export const config = sqliteTable('config', {
   value: text('value').notNull(),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
+
+export const siteAccessStats = sqliteTable('site_access_stats', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  visitedAt: integer('visited_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  userAgent: text('user_agent'),
+  referrer: text('referrer'),
+})

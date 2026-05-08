@@ -20,6 +20,7 @@ interface Article {
   topic: string
   publishedAt: string | null
   createdAt: string
+  viewCount?: number
 }
 
 const PAGE_SIZE = 6
@@ -79,6 +80,13 @@ export default function HomePage() {
   const [screenSize, setScreenSize] = useState<'mobile' | 'tablet' | 'desktop' | 'large'>('desktop')
   const [mounted, setMounted] = useState(false)
   const [trendingArticles, setTrendingArticles] = useState<Article[]>([])
+  const [siteStats, setSiteStats] = useState<{
+    total: number
+    today: number
+    yesterday: number
+    week: number
+    trend: number
+  } | null>(null)
 
   // 响应式容器配置 - 核心改进
   const containerStyle = {
@@ -196,6 +204,28 @@ export default function HomePage() {
       .then(r => r.json())
       .then(data => { if (data.hero_topic) setHeroTopic(data.hero_topic) })
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/site-stats')
+        if (res.ok) {
+          const data = await res.json()
+          setSiteStats(data)
+        }
+      } catch {}
+    }
+    
+    fetchStats()
+    const interval = setInterval(fetchStats, 20000)
+    return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/site-stats/visit', {
+      method: 'POST',
+    }).catch(() => {})
   }, [])
 
   const markRead = useCallback((id: number) => {
@@ -1014,6 +1044,37 @@ export default function HomePage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Widget 4: 站点访问统计 */}
+                {siteStats && (
+                  <div className="widget" style={{ marginTop: '1.5rem' }}>
+                    <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid #D85A30', letterSpacing: 0.5 }}>📊 站点统计</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>今日访问</span>
+                        <span style={{ fontSize: 16, fontWeight: 600, color: '#D85A30' }}>{siteStats.today}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>昨日访问</span>
+                        <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{siteStats.yesterday}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>本周访问</span>
+                        <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{siteStats.week}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>总访问</span>
+                        <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{siteStats.total}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>较昨日</span>
+                        <span style={{ fontSize: 12, color: siteStats.trend > 0 ? '#10B981' : siteStats.trend < 0 ? '#EF4444' : 'var(--text-faint)', fontWeight: 500 }}>
+                          {siteStats.trend > 0 ? '+' : ''}{siteStats.trend.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
               </aside>
             )}
