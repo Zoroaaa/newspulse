@@ -376,6 +376,16 @@ export default function AdminPage() {
                     : '尚未抓取'
                   return (
                     <div key={feed.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '0.5px solid #eee', fontSize: 13 }}>
+                      {/* 内置/自定义标识 */}
+                      <span style={{
+                        fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4,
+                        background: feed.isBuiltin ? '#E8F5E9' : '#FFF3E0',
+                        color: feed.isBuiltin ? '#2E7D32' : '#F57C00',
+                        border: feed.isBuiltin ? '0.5px solid #C8E6C9' : '0.5px solid #FFE0B2',
+                        flexShrink: 0,
+                      }}>
+                        {feed.isBuiltin ? '内置' : '自定义'}
+                      </span>
                       {/* 健康状态指示点 */}
                       <span title={dotTitle} style={{
                         width: 8, height: 8, borderRadius: '50%', background: dotColor,
@@ -404,9 +414,7 @@ export default function AdminPage() {
                           top: 2, left: feed.enabled ? 18 : 2, transition: 'left 0.15s',
                         }} />
                       </button>
-                      {!feed.isBuiltin && (
-                        <button onClick={() => deleteFeed(feed.id)} style={{ background: 'none', border: 'none', color: '#e57373', cursor: 'pointer', fontSize: 14, padding: 4 }}>✕</button>
-                      )}
+                      <button onClick={() => deleteFeed(feed.id)} style={{ background: 'none', border: 'none', color: '#e57373', cursor: 'pointer', fontSize: 14, padding: 4 }}>✕</button>
                     </div>
                   )
                 })}
