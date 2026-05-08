@@ -455,6 +455,15 @@ export default function AdminPage() {
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: '1.5rem' }}>话题分类</h2>
               <div style={{ background: '#fff', border: '0.5px solid #e0ddd6', borderRadius: 10, padding: '1.25rem' }}>
+                <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '0.5px solid #eee' }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#666', marginBottom: 6 }}>头版分组（Hero）</label>
+                  <select value={config.hero_topic || ''} onChange={e => setConfig(p => ({ ...p, hero_topic: e.target.value }))}
+                    style={{ width: '100%', maxWidth: 300, padding: '8px 10px', borderRadius: 8, border: '0.5px solid #ccc', fontSize: 13, fontFamily: 'Georgia, serif', background: '#fff' }}>
+                    <option value="">默认（第一个话题）</option>
+                    {topics.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <p style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>杂志模式下首页头条区域显示的分组，保存后生效。</p>
+                </div>
                 {topics.map(topic => {
                   const count = feeds.filter(f => f.topic === topic).length
                   return (

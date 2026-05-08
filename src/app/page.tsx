@@ -23,17 +23,24 @@ interface Article {
 
 const PAGE_SIZE = 6
 
-const TOPIC_COLORS: Record<string, string> = {
-  '科技': '#185FA5',
-  '商业': '#D85A30',
-  '政治': '#639922',
-  '文化': '#7B3FF2',
-  '国际': '#D85A30',
-  '财经': '#639922',
-  '科学': '#7B3FF2',
-  'AI': '#0D9488',
-  '深度': '#B45309',
-  '开发': '#4338CA',
+function generateTopicColor(topic: string): string {
+  let hash = 0
+  for (let i = 0; i < topic.length; i++) {
+    hash = topic.charCodeAt(i) + ((hash << 5) - hash)
+    hash = hash & hash
+  }
+  const hue = Math.abs(hash % 360)
+  const saturation = 65 + (Math.abs(hash >> 8) % 20)
+  const lightness = 45 + (Math.abs(hash >> 16) % 10)
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+}
+
+const topicColorCache: Record<string, string> = {}
+function getTopicColor(topic: string): string {
+  if (!topicColorCache[topic]) {
+    topicColorCache[topic] = generateTopicColor(topic)
+  }
+  return topicColorCache[topic]
 }
 
 function timeAgo(dateStr: string | null) {
@@ -68,9 +75,12 @@ export default function HomePage() {
   const [showBookmarks, setShowBookmarks] = useState(false)
   const [darkMode, setDarkMode] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [screenSize, setScreenSize] = useState<'mobile' | 'tablet' | 'desktop' | 'large'>('desktop')
+  const [mounted, setMounted] = useState(false)
   const [trendingArticles, setTrendingArticles] = useState<Article[]>([])
   const [readIds, setReadIds] = useState<Set<number>>(new Set())
   const [focusedId, setFocusedId] = useState<number | null>(null)
+  const [heroTopic, setHeroTopic] = useState<string>('')
   const sectionRefs = useRef<Record<string, HTMLDivElement>>({})
   const hasMoreRef = useRef<Record<string, boolean>>({})
   // 用 state 驱动 loadMore 按钮的显隐（ref 不触发重渲染）
@@ -144,7 +154,15 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
+    const check = () => {
+      const width = window.innerWidth
+      setIsMobile(width < 768)
+      if (width < 768) setScreenSize('mobile')
+      else if (width < 1024) setScreenSize('tablet')
+      else if (width < 1440) setScreenSize('desktop')
+      else setScreenSize('large')
+      setMounted(true)
+    }
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
@@ -155,6 +173,13 @@ export default function HomePage() {
       const saved = localStorage.getItem('newspulse_read')
       if (saved) setReadIds(new Set(JSON.parse(saved)))
     } catch {}
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/config/public')
+      .then(r => r.json())
+      .then(data => { if (data.hero_topic) setHeroTopic(data.hero_topic) })
+      .catch(() => {})
   }, [])
 
   const markRead = useCallback((id: number) => {
@@ -364,10 +389,12 @@ export default function HomePage() {
     }
   }
 
-  const gridCols = isMobile ? 'repeat(1,1fr)' : style === 'card' ? 'repeat(2,1fr)' : 'repeat(3,1fr)'
-  const photoCols = isMobile ? 'repeat(1,1fr)' : 'repeat(3,1fr)'
+  const gridCols = isMobile ? 'repeat(1,1fr)' : screenSize === 'tablet' ? 'repeat(2,1fr)' : style === 'card' ? 'repeat(3,1fr)' : screenSize === 'large' ? 'repeat(4,1fr)' : 'repeat(3,1fr)'
+  const photoCols = isMobile ? 'repeat(1,1fr)' : screenSize === 'tablet' ? 'repeat(2,1fr)' : screenSize === 'large' ? 'repeat(4,1fr)' : 'repeat(3,1fr)'
+  const trendingCols = isMobile ? 'repeat(1,1fr)' : screenSize === 'tablet' ? 'repeat(3,1fr)' : screenSize === 'large' ? 'repeat(5,1fr)' : 'repeat(5,1fr)'
   const topics = Object.keys(articles)
-  const topArticle = topics.length > 0 ? articles[topics[0]]?.[0] : null
+  const heroTopicKey = (heroTopic && topics.includes(heroTopic)) ? heroTopic : topics[0] || ''
+  const topArticle = heroTopicKey ? articles[heroTopicKey]?.[0] : null
 
   const setCardRef = useCallback((id: number) => (el: HTMLDivElement | null) => {
     if (el) cardRefs.current.set(id, el)
@@ -506,7 +533,7 @@ export default function HomePage() {
         borderBottom: '1px solid var(--border)',
         position: 'sticky', top: 0, zIndex: 50,
       }}>
-        <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 1rem', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 2rem', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.5 }}>
             News<span style={{ color: '#D85A30' }}>Pulse</span>
           </div>
@@ -520,7 +547,6 @@ export default function HomePage() {
               {darkMode ? '☀️' : '🌙'}
             </button>
 
-            {/* 搜索框：独立容器，不用绝对定位覆盖兄弟元素 */}
             {!isMobile && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 0, overflow: 'hidden' }}>
                 <div style={{
@@ -605,7 +631,6 @@ export default function HomePage() {
               {translating ? '翻译中...' : translated ? '✓ 已翻译' : '翻译'}
             </button>
 
-            {/* 移动端搜索按钮 */}
             {isMobile && (
               <button onClick={showSearch ? closeSearch : openSearch} style={{
                 padding: '4px 8px', borderRadius: 6, fontSize: 14,
@@ -630,7 +655,7 @@ export default function HomePage() {
           msOverflowStyle: 'none',
         }}>
           <style>{`nav::-webkit-scrollbar { display: none; }`}</style>
-          <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 1rem', display: 'flex', gap: 2, height: 48, alignItems: 'center', minWidth: 'max-content' }}>
+          <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 2rem', display: 'flex', gap: 2, height: 48, alignItems: 'center', justifyContent: 'flex-start' }}>
             <button onClick={() => { setShowBookmarks(!showBookmarks); setShowSearch(false) }} style={{
               padding: '6px 14px',
               borderRadius: 20,
@@ -650,7 +675,7 @@ export default function HomePage() {
             <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
             {topics.map(t => {
               const count = articles[t]?.length || 0
-              const color = TOPIC_COLORS[t] || '#D85A30'
+              const color = getTopicColor(t)
               return (
                 <button key={t} onClick={() => scrollToTopic(t)} style={{
                   padding: '6px 14px',
@@ -703,7 +728,7 @@ export default function HomePage() {
       )}
 
       {loading ? (
-        <div style={{ maxWidth: 960, margin: '0 auto', padding: '1.5rem' }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.5rem 2rem' }}>
           <div className="skeleton" style={{ height: 28, width: 120, marginBottom: 16 }} />
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 12 }}>
             {[1,2,3,4,5,6].map(i => (
@@ -717,7 +742,7 @@ export default function HomePage() {
           <p style={{ fontSize: 13 }}>请前往 /admin 配置 AI 并触发抓取</p>
         </div>
       ) : (
-        <main style={{ maxWidth: 960, margin: '0 auto', padding: isMobile ? '1rem' : '1.5rem' }}>
+        <main style={{ maxWidth: '1400px', margin: '0 auto', padding: isMobile ? '1rem' : '1.5rem 2rem' }}>
 
           {/* Search Results */}
           {showSearch && searchQuery && (
@@ -734,7 +759,7 @@ export default function HomePage() {
               ) : searchResults.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-faint)', fontSize: 14 }}>未找到相关文章</div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12 }}>
                   {searchResults.map(a => renderCard(a))}
                 </div>
               )}
@@ -754,7 +779,7 @@ export default function HomePage() {
                   <p style={{ fontSize: 12 }}>点击文章卡片上的 ★ 即可收藏</p>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: gridCols, gap: 12 }}>
                   {Object.values(articles).flat().filter(a => bookmarks.has(a.id)).map(a => renderCard(a))}
                 </div>
               )}
@@ -768,7 +793,7 @@ export default function HomePage() {
                 <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1.2 }}>🔥 热门</span>
                 <span style={{ fontSize: 11, color: 'var(--text-faint)', background: 'var(--tag-bg)', padding: '2px 8px', borderRadius: 10 }}>趋势</span>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(5,1fr)', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: trendingCols, gap: 10 }}>
                 {trendingArticles.map((a, i) => (
                   <div key={a.id} onClick={() => { setSelected(a); markRead(a.id) }} style={{
                     background: 'var(--bg-card)', border: '0.5px solid var(--border)', borderRadius: 10,
@@ -790,7 +815,7 @@ export default function HomePage() {
 
           {/* Hero (magazine only, non-mobile) */}
           {style === 'magazine' && topArticle && !isMobile && (
-            <div ref={el => { if (el) sectionRefs.current[topics[0]] = el as HTMLDivElement }} style={{
+            <div ref={el => { if (el) sectionRefs.current[heroTopicKey] = el as HTMLDivElement }} style={{
               display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem',
               marginBottom: '2rem', paddingBottom: '1.5rem',
               borderBottom: '1px solid var(--border)',
@@ -814,7 +839,7 @@ export default function HomePage() {
                 </div>
               </div>
               <div style={{ borderLeft: '1px solid var(--border)', paddingLeft: '1.5rem' }}>
-                {(articles[topics[0]] ?? []).slice(1, 4).map((a, i) => (
+                {(articles[heroTopicKey] ?? []).slice(1, 4).map((a, i) => (
                   <div key={a.id} onClick={() => { setSelected(a); markRead(a.id) }} style={{ cursor: 'pointer', paddingBottom: 14, marginBottom: 14, borderBottom: i < 2 ? '0.5px solid var(--border-light)' : 'none' }}>
                     <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: '#185FA5', marginBottom: 4 }}>{a.topic}</div>
                     <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.4, color: 'var(--text-primary)', marginBottom: 4 }}>
@@ -832,7 +857,7 @@ export default function HomePage() {
             const allArticles = articles[topic] || []
             const canLoadMore = hasMoreState[topic] ?? false
             const isLoading = loadingMoreRef.current.has(topic)
-            const color = TOPIC_COLORS[topic] || '#1a1a1a'
+            const color = getTopicColor(topic)
 
             return (
               <section
