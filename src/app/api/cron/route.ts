@@ -20,10 +20,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const [{ total, errors }, cleaned] = await Promise.all([
-    crawlAllFeedsWithFeedId(),
-    cleanupOldArticles(),
-  ])
+  // 先完成爬取，再清理旧文章，避免新写入的文章被并发清理误删
+  const { total, errors } = await crawlAllFeedsWithFeedId()
+  const cleaned = await cleanupOldArticles()
   return NextResponse.json({ ok: true, processed: total, errors, cleaned })
 }
 

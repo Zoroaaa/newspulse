@@ -37,18 +37,10 @@ const TOPIC_COLORS: Record<string, string> = {
 }
 
 function timeAgo(dateStr: string | null) {
-  if (!dateStr) {
-    console.warn('[timeAgo] dateStr is empty:', { dateStr, type: typeof dateStr })
-    return ''
-  }
+  if (!dateStr) return ''
   try {
-    const result = formatDistanceToNow(new Date(dateStr), { locale: zhCN, addSuffix: true })
-    if (!result) {
-      console.warn('[timeAgo] formatDistanceToNow returned empty:', { dateStr, parsedDate: new Date(dateStr) })
-    }
-    return result
-  } catch (e) {
-    console.error('[timeAgo] parse error:', { dateStr, error: e })
+    return formatDistanceToNow(new Date(dateStr), { locale: zhCN, addSuffix: true })
+  } catch {
     return ''
   }
 }
@@ -81,26 +73,28 @@ export default function HomePage() {
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const sectionRefs = useRef<Record<string, HTMLDivElement>>({})
   const hasMoreRef = useRef<Record<string, boolean>>({})
+  // 用 state 驱动 loadMore 按钮的显隐（ref 不触发重渲染）
+  const [hasMoreState, setHasMoreState] = useState<Record<string, boolean>>({})
   const loadingMoreRef = useRef<Set<string>>(new Set())
   const cardRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  // 抽出 articleIds ref，供 keydown handler 读取，避免 articles 进入依赖数组
+  const articleIdsRef = useRef<number[]>([])
 
-  // 多源报道映射：使用 shared 算法，阈值统一
+  // 多源报道映射：单向遍历，每对只比较一次（O(n²/2) → 同渐进但常数减半，且避免重复赋值）
   const similarMap = useMemo(() => {
     const all = Object.values(articles).flat()
     const map: Record<number, Article[]> = {}
 
     for (let i = 0; i < all.length; i++) {
-      const group: Article[] = [all[i]]
-      for (let j = 0; j < all.length; j++) {
-        if (i === j) continue
+      for (let j = i + 1; j < all.length; j++) {
         if (isSameEvent(all[i], all[j])) {
-          group.push(all[j])
+          if (!map[all[i].id]) map[all[i].id] = []
+          if (!map[all[j].id]) map[all[j].id] = []
+          map[all[i].id].push(all[j])
+          map[all[j].id].push(all[i])
         }
-      }
-      if (group.length > 1) {
-        map[all[i].id] = group.filter(x => x.id !== all[i].id)
       }
     }
     return map
@@ -111,9 +105,13 @@ export default function HomePage() {
       .then(r => r.json())
       .then(articleData => {
         setArticles(articleData)
+        const hasMore: Record<string, boolean> = {}
         for (const t of Object.keys(articleData)) {
-          hasMoreRef.current[t] = articleData[t].length >= PAGE_SIZE
+          hasMore[t] = articleData[t].length >= PAGE_SIZE
+          hasMoreRef.current[t] = hasMore[t]
         }
+        setHasMoreState(hasMore)
+        articleIdsRef.current = Object.values(articleData).flat().map((a: any) => a.id)
         const firstTopic = Object.keys(articleData)[0]
         if (firstTopic) setActiveTopic(firstTopic)
         setLoading(false)
@@ -167,6 +165,12 @@ export default function HomePage() {
       try { localStorage.setItem('newspulse_read', JSON.stringify([...next])) } catch {}
       return next
     })
+    // 上报阅读事件（fire-and-forget，不阻塞 UI）
+    fetch('/api/articles/view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(() => {})
   }, [])
 
   const toggleDarkMode = useCallback(() => {
@@ -288,8 +292,7 @@ export default function HomePage() {
 
       if (e.key === 'j') {
         e.preventDefault()
-        const flat = Object.values(articles).flat()
-        const ids = flat.map(a => a.id)
+        const ids = articleIdsRef.current
         const curIdx = focusedId ? ids.indexOf(focusedId) : -1
         const nextIdx = Math.min(curIdx + 1, ids.length - 1)
         const nextId = ids[nextIdx]
@@ -301,8 +304,7 @@ export default function HomePage() {
       }
       if (e.key === 'k') {
         e.preventDefault()
-        const flat = Object.values(articles).flat()
-        const ids = flat.map(a => a.id)
+        const ids = articleIdsRef.current
         const curIdx = focusedId ? ids.indexOf(focusedId) : ids.length
         const nextIdx = Math.max(curIdx - 1, 0)
         const nextId = ids[nextIdx]
@@ -314,15 +316,18 @@ export default function HomePage() {
       }
       if (e.key === 'Enter' && focusedId) {
         e.preventDefault()
-        const flat = Object.values(articles).flat()
-        const a = flat.find(x => x.id === focusedId)
-        if (a) { setSelected(a); markRead(a.id) }
+        // 从 articles state 读取当前文章（仍需闭包，但只在 Enter 时触发，可接受）
+        setArticles(prev => {
+          const a = Object.values(prev).flat().find(x => x.id === focusedId)
+          if (a) { setSelected(a); markRead(a.id) }
+          return prev
+        })
         return
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [articles, focusedId, showSearch, showBookmarks, selected, handleTranslateAll, markRead, openSearch, closeSearch])
+  }, [focusedId, showSearch, showBookmarks, selected, handleTranslateAll, markRead, openSearch, closeSearch])
 
   const loadMore = async (topic: string) => {
     if (loadingMoreRef.current.has(topic)) return
@@ -332,12 +337,18 @@ export default function HomePage() {
       const res = await fetch(`/api/articles?topic=${encodeURIComponent(topic)}&offset=${offset}&limit=${PAGE_SIZE}`)
       const data = await res.json()
       if (data.rows?.length > 0) {
-        setArticles(prev => ({
-          ...prev,
-          [topic]: [...(prev[topic] || []), ...data.rows],
-        }))
+        setArticles(prev => {
+          const next = {
+            ...prev,
+            [topic]: [...(prev[topic] || []), ...data.rows],
+          }
+          articleIdsRef.current = Object.values(next).flat().map(a => a.id)
+          return next
+        })
       }
-      hasMoreRef.current[topic] = data.hasMore ?? false
+      const hasMore = data.hasMore ?? false
+      hasMoreRef.current[topic] = hasMore
+      setHasMoreState(prev => ({ ...prev, [topic]: hasMore }))
     } catch {}
     loadingMoreRef.current.delete(topic)
   }
@@ -358,6 +369,11 @@ export default function HomePage() {
   const topics = Object.keys(articles)
   const topArticle = topics.length > 0 ? articles[topics[0]]?.[0] : null
 
+  const setCardRef = useCallback((id: number) => (el: HTMLDivElement | null) => {
+    if (el) cardRefs.current.set(id, el)
+    else cardRefs.current.delete(id)
+  }, [])
+
   const renderCard = (a: Article, idx?: number) => {
     const title = translated && a.titleZh ? a.titleZh : a.title
     const isBookmarked = bookmarks.has(a.id)
@@ -367,16 +383,11 @@ export default function HomePage() {
     const titleColor = isRead ? 'var(--text-faint)' : 'var(--text-primary)'
     const similar = similarMap[a.id]
 
-    const setCardRef = (el: HTMLDivElement | null) => {
-      if (el) cardRefs.current.set(a.id, el)
-      else cardRefs.current.delete(a.id)
-    }
-
     const handleClick = () => { setSelected(a); markRead(a.id) }
 
     if (style === 'list') {
       return (
-        <div key={a.id} ref={setCardRef} tabIndex={-1} onClick={handleClick} style={{
+        <div key={a.id} ref={setCardRef(a.id)} tabIndex={-1} onClick={handleClick} style={{
           display: 'flex', gap: 14, padding: '12px 0',
           borderBottom: '0.5px solid var(--border)', cursor: 'pointer',
           alignItems: 'flex-start', outline: 'none', boxShadow: focusRing, borderRadius: 4,
@@ -402,7 +413,7 @@ export default function HomePage() {
 
     if (style === 'photo') {
       return (
-        <div key={a.id} ref={setCardRef} tabIndex={-1} onClick={handleClick} style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', position: 'relative', aspectRatio: '16/10', background: 'var(--border)', outline: 'none', boxShadow: focusRing }}>
+        <div key={a.id} ref={setCardRef(a.id)} tabIndex={-1} onClick={handleClick} style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', position: 'relative', aspectRatio: '16/10', background: 'var(--border)', outline: 'none', boxShadow: focusRing }}>
           {a.imageUrl ? (
             <img src={a.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isRead ? 0.7 : 1 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
           ) : (
@@ -427,7 +438,7 @@ export default function HomePage() {
 
     // card / magazine
     return (
-      <div key={a.id} ref={setCardRef} tabIndex={-1} onClick={handleClick} className="fade-up" style={{
+      <div key={a.id} ref={setCardRef(a.id)} tabIndex={-1} onClick={handleClick} className="fade-up" style={{
         background: 'var(--bg-card)', border: '0.5px solid var(--border)', borderRadius: 10,
         padding: 14, cursor: 'pointer', transition: 'border-color 0.15s', position: 'relative',
         outline: 'none', boxShadow: focusRing,
@@ -818,7 +829,7 @@ export default function HomePage() {
           {/* Topic sections */}
           {topics.map((topic) => {
             const allArticles = articles[topic] || []
-            const canLoadMore = hasMoreRef.current[topic]
+            const canLoadMore = hasMoreState[topic] ?? false
             const isLoading = loadingMoreRef.current.has(topic)
             const color = TOPIC_COLORS[topic] || '#1a1a1a'
 

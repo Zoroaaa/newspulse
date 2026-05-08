@@ -8,6 +8,9 @@ export const feeds = sqliteTable('feeds', {
   topic: text('topic').notNull(),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   isBuiltin: integer('is_builtin', { mode: 'boolean' }).notNull().default(false),
+  consecutiveErrors: integer('consecutive_errors').notNull().default(0),
+  lastError: text('last_error'),
+  lastSuccess: integer('last_success', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
 
@@ -23,6 +26,11 @@ export const articles = sqliteTable('articles', {
   topic: text('topic').notNull(),
   publishedAt: integer('published_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+})
+
+export const articleViews = sqliteTable('article_views', {
+  articleId: integer('article_id').notNull().references(() => articles.id),
+  viewedAt: integer('viewed_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 })
 
 export const config = sqliteTable('config', {

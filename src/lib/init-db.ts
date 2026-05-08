@@ -11,8 +11,20 @@ export async function initDB() {
     topic TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     is_builtin INTEGER NOT NULL DEFAULT 0,
+    consecutive_errors INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    last_success INTEGER,
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`)
+
+  // 兼容旧库：新字段按需迁移
+  for (const col of [
+    'ALTER TABLE feeds ADD COLUMN consecutive_errors INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE feeds ADD COLUMN last_error TEXT',
+    'ALTER TABLE feeds ADD COLUMN last_success INTEGER',
+  ]) {
+    try { await db.run(sql.raw(col)) } catch { /* 字段已存在，忽略 */ }
+  }
 
   await db.run(sql`CREATE TABLE IF NOT EXISTS articles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -27,6 +39,22 @@ export async function initDB() {
     published_at INTEGER,
     created_at INTEGER NOT NULL DEFAULT (unixepoch())
   )`)
+
+  // 主查询路径索引：按 topic 分组 + 按时间排序
+  await db.run(sql`CREATE INDEX IF NOT EXISTS idx_articles_topic_time
+    ON articles (topic, COALESCE(published_at, created_at) DESC)`)
+
+  // 清理任务索引：按 created_at 范围删除
+  await db.run(sql`CREATE INDEX IF NOT EXISTS idx_articles_created_at
+    ON articles (created_at)`)
+
+  await db.run(sql`CREATE TABLE IF NOT EXISTS article_views (
+    article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+    viewed_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`)
+
+  await db.run(sql`CREATE INDEX IF NOT EXISTS idx_article_views_article_id
+    ON article_views (article_id)`)
 
   await db.run(sql`CREATE TABLE IF NOT EXISTS config (
     key TEXT PRIMARY KEY,

@@ -31,12 +31,6 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [onClose])
-
-  useEffect(() => {
     // 重置状态（切换文章时）
     setState('idle')
     setResult(null)

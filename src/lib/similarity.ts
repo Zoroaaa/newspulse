@@ -2,7 +2,7 @@
  * 文章相似度计算 - 统一给 page.tsx 和 ArticlePanel 使用
  */
 
-const STOP_WORDS = new Set([
+export const STOP_WORDS = new Set([
   'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
   'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'has', 'have',
   'will', 'can', 'how', 'what', 'why', 'who', 'its', 'as', 'be', 'this',

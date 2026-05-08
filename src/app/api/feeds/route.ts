@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { feeds } from '@/lib/schema'
+import { feeds, articles } from '@/lib/schema'
 import { eq } from 'drizzle-orm'
 import { requireAdmin } from '@/lib/auth'
 
@@ -41,6 +41,8 @@ export async function DELETE(req: NextRequest) {
   if (auth) return auth
 
   const { id } = await req.json()
+  // 级联删除该 feed 的所有文章，避免孤儿数据
+  await db.delete(articles).where(eq(articles.feedId, id))
   await db.delete(feeds).where(eq(feeds.id, id))
   return NextResponse.json({ ok: true })
 }

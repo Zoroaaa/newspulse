@@ -37,9 +37,23 @@ function extractImage(item: any): string | null {
 function extractText(val: any): string {
   if (typeof val === 'string') return val
   if (typeof val === 'object' && val !== null) {
+    // Atom feed 的 <link href="..."> 解析为 { '@_href': '...' }
+    if (val['@_href']) return val['@_href']
     return val['#text'] || val._ || ''
   }
   return ''
+}
+
+// Atom feed 的 link 字段可能是数组（alternate + self 等多个 rel）
+function extractLink(linkVal: any): string {
+  if (!linkVal) return ''
+  // 数组：取 rel=alternate 或第一个有 href 的
+  if (Array.isArray(linkVal)) {
+    const alt = linkVal.find((l: any) => l['@_rel'] === 'alternate' || !l['@_rel'])
+    const found = alt ?? linkVal.find((l: any) => l['@_href'])
+    return found?.['@_href'] ?? ''
+  }
+  return extractText(linkVal)
 }
 
 export async function parseFeed(url: string, limit = 20): Promise<ParsedArticle[]> {
@@ -61,7 +75,7 @@ export async function parseFeed(url: string, limit = 20): Promise<ParsedArticle[
 
   return items.slice(0, limit).map((item: any) => {
     const title = extractText(item.title || item.name || '')
-    const link = extractText(item.link || item.url || item.id || '')
+    const link = extractLink(item.link || item.url || item.id || '')
     const description = extractText(item.description || item.summary || item['content:encoded'] || '')
     const summary = description.replace(/<[^>]*>/g, '').slice(0, 300).trim()
     const pubDate = item.pubDate || item.published || item.updated || null
@@ -69,7 +83,7 @@ export async function parseFeed(url: string, limit = 20): Promise<ParsedArticle[
 
     return {
       title,
-      url: typeof link === 'string' ? link : '',
+      url: link,
       summary,
       imageUrl,
       publishedAt: pubDate ? new Date(pubDate) : null,

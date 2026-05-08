@@ -28,18 +28,6 @@ export async function GET(req: NextRequest) {
         .from(articles)
         .where(eq(articles.topic, topic))
 
-      console.log('[API/articles] Load more sample:', {
-        topic,
-        offset,
-        firstRow: rows[0] ? {
-          id: rows[0].id,
-          publishedAt: rows[0].publishedAt,
-          publishedAtType: typeof rows[0].publishedAt,
-          createdAt: rows[0].createdAt,
-          createdAtType: typeof rows[0].createdAt,
-        } : null
-      })
-
       return NextResponse.json({ rows, hasMore: offset + rows.length < total })
     }
 
@@ -87,20 +75,8 @@ export async function GET(req: NextRequest) {
         ordered[t] = result[t] || []
       }
 
-      console.log('[API/articles] Initial load sample:', {
-        firstTopic: topics[0],
-        firstArticle: ordered[topics[0]]?.[0] ? {
-          id: ordered[topics[0]][0].id,
-          publishedAt: ordered[topics[0]][0].publishedAt,
-          publishedAtType: typeof ordered[topics[0]][0].publishedAt,
-          createdAt: ordered[topics[0]][0].createdAt,
-          createdAtType: typeof ordered[topics[0]][0].createdAt,
-        } : null
-      })
-
       return NextResponse.json(ordered)
     } catch (e) {
-      console.error('[API/articles] Window function error, falling back:', e)
       // 回退：N+1，逐 topic 查询（保留原有行为）
       const result: Record<string, any[]> = {}
       for (const t of topics) {

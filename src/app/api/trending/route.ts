@@ -1,40 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { articles } from '@/lib/schema'
-import { desc } from 'drizzle-orm'
+import { articles, articleViews } from '@/lib/schema'
+import { desc, gte, sql, eq } from 'drizzle-orm'
+import { extractKeywords } from '@/lib/similarity'
 
-// 提取标题关键词（过滤停用词，支持中英文）
-function extractKeywords(title: string): string[] {
-  const stopWords = new Set([
-    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-    'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'has', 'have',
-    'will', 'can', 'how', 'what', 'why', 'who', 'its', 'as', 'be', 'this',
-    'that', 'it', 'he', 'she', 'they', 'we', 'his', 'her', 'their', 'new',
-    'over', 'after', 'says', 'said', 'amid', 'into', 'more', 'than',
-  ])
-  return title
-    .toLowerCase()
-    .replace(/[^\w\u4e00-\u9fff\s]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length > 3 && !stopWords.has(w))
+type ArticleRow = {
+  id: number; title: string; titleZh: string | null; url: string
+  summary: string | null; imageUrl: string | null; source: string
+  topic: string; publishedAt: Date | null; createdAt: Date
 }
 
-// 基于关键词共现计算多源覆盖分（同一事件被多个不同来源报道=热点）
-function clusterScore(article: { title: string; source: string }, others: { title: string; source: string }[]): number {
-  const kw = extractKeywords(article.title)
-  if (kw.length === 0) return 0
-  const kwSet = new Set(kw)
+// 预计算好所有文章的关键词集，外部传入，避免重复计算
+function clusterScore(
+  article: ArticleRow,
+  articleIdx: number,
+  allKwSets: Set<string>[],
+  allSources: string[]
+): number {
+  const kwSet = allKwSets[articleIdx]
+  if (kwSet.size === 0) return 0
+
   let score = 0
   const seenSources = new Set([article.source])
 
-  for (const other of others) {
-    if (seenSources.has(other.source)) continue // 同源重复不计
-    const otherKw = extractKeywords(other.title)
-    const matchCount = otherKw.filter(w => kwSet.has(w)).length
-    const similarity = matchCount / Math.max(kw.length, otherKw.length, 1)
+  for (let j = 0; j < allKwSets.length; j++) {
+    if (j === articleIdx) continue
+    if (seenSources.has(allSources[j])) continue
+
+    const otherSet = allKwSets[j]
+    let matchCount = 0
+    for (const w of otherSet) {
+      if (kwSet.has(w)) matchCount++
+    }
+    const similarity = matchCount / Math.max(kwSet.size, otherSet.size, 1)
     if (similarity >= 0.3) {
       score += similarity * 20
-      seenSources.add(other.source)
+      seenSources.add(allSources[j])
     }
   }
   return score
@@ -44,6 +45,8 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(parseInt(req.nextUrl.searchParams.get('limit') || '10'), 20)
 
   try {
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000)
+
     const recentArticles = await db.select({
       id: articles.id,
       title: articles.title,
@@ -55,25 +58,30 @@ export async function GET(req: NextRequest) {
       topic: articles.topic,
       publishedAt: articles.publishedAt,
       createdAt: articles.createdAt,
+      viewCount: sql<number>`(
+        SELECT COUNT(*) FROM article_views
+        WHERE article_id = ${articles.id}
+        AND viewed_at >= ${Math.floor(cutoff.getTime() / 1000)}
+      )`,
     }).from(articles)
       .orderBy(desc(articles.publishedAt))
       .limit(150)
 
-    const scored = recentArticles.map(article => {
-      // 1. 新鲜度：优先用 publishedAt，越新越高
+    // 预计算每篇文章的关键词集，后续 clusterScore 直接查表，不重复 extractKeywords
+    const kwSets = recentArticles.map(a => new Set(extractKeywords(a.title)))
+    const sources = recentArticles.map(a => a.source)
+
+    const scored = recentArticles.map((article, idx) => {
       const pubTime = article.publishedAt
         ? new Date(article.publishedAt).getTime()
         : new Date(article.createdAt).getTime()
       const ageHours = (Date.now() - pubTime) / (1000 * 60 * 60)
       const freshnessScore = Math.max(0, 1 - ageHours / 48) * 30
-
-      // 2. 多源覆盖：多家媒体报道同一事件 → 热点
-      const coverageScore = clusterScore(article, recentArticles.filter(o => o.id !== article.id))
-
-      // 3. 内容质量
+      const coverageScore = clusterScore(article, idx, kwSets, sources)
       const qualityScore = article.summary && article.summary.length > 80 ? 10 : 0
-
-      return { ...article, _score: freshnessScore + coverageScore + qualityScore }
+      // 近48h阅读量：每次阅读+2分，上限20分
+      const viewScore = Math.min((article.viewCount ?? 0) * 2, 20)
+      return { ...article, _score: freshnessScore + coverageScore + qualityScore + viewScore }
     })
 
     scored.sort((a, b) => b._score - a._score)

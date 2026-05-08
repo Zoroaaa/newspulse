@@ -54,13 +54,7 @@ async function main() {
   console.log(`   Feeds with errors: ${errors}`)
   console.log(`   Success rate: ${successRate}%`)
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`)
-  // feed 抓取失败（404、网络超时等）属于预期内情况，不让 cron 整体失败
-  // 仅当全部 feed 都失败（可能是配置/环境问题）才 exit 1
-  if (total === 0 && errors > 0) {
-    console.error("All feeds failed, possible configuration or network issue.")
-    process.exit(1)
-  }
-  process.exit(0)
+  process.exit(errors > 0 ? 1 : 0)
 }
 
 main().catch(e => {

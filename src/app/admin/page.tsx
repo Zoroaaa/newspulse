@@ -9,6 +9,9 @@ interface Feed {
   topic: string
   enabled: boolean
   isBuiltin: boolean
+  consecutiveErrors: number
+  lastError: string | null
+  lastSuccess: string | null
 }
 
 type AdminSection = 'dashboard' | 'feeds' | 'ai' | 'topics'
@@ -243,18 +246,39 @@ export default function AdminPage() {
           {section === 'dashboard' && (
             <div>
               <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: '1.5rem' }}>概览</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: '1.5rem' }}>
                 {[
                   { label: '已启用源', value: stats.feeds },
                   { label: '文章总数', value: stats.articles },
                   { label: '话题数', value: topics.length },
+                  { label: '异常源', value: feeds.filter(f => f.consecutiveErrors >= 3).length, warn: true },
                 ].map(s => (
-                  <div key={s.label} style={{ background: '#fff', border: '0.5px solid #e0ddd6', borderRadius: 10, padding: '1rem' }}>
-                    <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>{s.label}</div>
-                    <div style={{ fontSize: 24, fontWeight: 600 }}>{s.value}</div>
+                  <div key={s.label} style={{ background: '#fff', border: `0.5px solid ${s.warn && (s.value as number) > 0 ? '#f44336' : '#e0ddd6'}`, borderRadius: 10, padding: '1rem' }}>
+                    <div style={{ fontSize: 12, color: s.warn && (s.value as number) > 0 ? '#c62828' : '#999', marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ fontSize: 24, fontWeight: 600, color: s.warn && (s.value as number) > 0 ? '#c62828' : 'inherit' }}>{s.value}</div>
                   </div>
                 ))}
               </div>
+
+              {/* 异常源列表 */}
+              {feeds.filter(f => f.consecutiveErrors >= 3).length > 0 && (
+                <div style={{ background: '#fff3f3', border: '0.5px solid #ffcdd2', borderRadius: 10, padding: '1.25rem', marginBottom: '1.5rem' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#c62828', marginBottom: '0.75rem' }}>⚠️ 连续失败的源</div>
+                  {feeds.filter(f => f.consecutiveErrors >= 3).map(feed => (
+                    <div key={feed.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '0.5px solid #ffcdd2', fontSize: 13 }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontWeight: 500 }}>{feed.name}</span>
+                        <span style={{ fontSize: 11, color: '#e57373', marginLeft: 8 }}>连续失败 {feed.consecutiveErrors} 次</span>
+                      </div>
+                      {feed.lastError && (
+                        <div style={{ fontSize: 11, color: '#999', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={feed.lastError}>
+                          {feed.lastError}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{ background: '#fff', border: '0.5px solid #e0ddd6', borderRadius: 10, padding: '1.25rem' }}>
                 <div style={{ fontSize: 14, fontWeight: 600, marginBottom: '1rem' }}>手动触发抓取</div>
                 <button onClick={triggerCrawl} disabled={crawling} style={{
@@ -309,27 +333,54 @@ export default function AdminPage() {
 
               {/* Feed list */}
               <div style={{ background: '#fff', border: '0.5px solid #e0ddd6', borderRadius: 10, padding: '1.25rem' }}>
-                {feeds.map(feed => (
-                  <div key={feed.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '0.5px solid #eee', fontSize: 13 }}>
-                    <div style={{ flex: 1, fontWeight: 500 }}>{feed.name}</div>
-                    <div style={{ fontSize: 11, color: '#888', background: '#f5f3ee', padding: '2px 8px', borderRadius: 4 }}>{feed.topic}</div>
-                    <div style={{ fontSize: 11, color: '#aaa', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{feed.url}</div>
-                    {/* Toggle */}
-                    <button onClick={() => toggleFeed(feed.id, !feed.enabled)} style={{
-                      width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer',
-                      background: feed.enabled ? '#639922' : '#ccc',
-                      position: 'relative', transition: 'background 0.15s', flexShrink: 0,
-                    }}>
-                      <span style={{
-                        position: 'absolute', width: 16, height: 16, borderRadius: '50%', background: '#fff',
-                        top: 2, left: feed.enabled ? 18 : 2, transition: 'left 0.15s',
+                {feeds.map(feed => {
+                  const isHealthy = feed.consecutiveErrors === 0
+                  const isWarning = feed.consecutiveErrors >= 1 && feed.consecutiveErrors < 3
+                  const isError = feed.consecutiveErrors >= 3
+                  const dotColor = isError ? '#f44336' : isWarning ? '#ff9800' : '#4caf50'
+                  const dotTitle = isError
+                    ? `连续失败 ${feed.consecutiveErrors} 次\n${feed.lastError || ''}`
+                    : isWarning
+                    ? `失败 ${feed.consecutiveErrors} 次\n${feed.lastError || ''}`
+                    : feed.lastSuccess
+                    ? `最后成功：${new Date(feed.lastSuccess).toLocaleString('zh-CN')}`
+                    : '尚未抓取'
+                  return (
+                    <div key={feed.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '0.5px solid #eee', fontSize: 13 }}>
+                      {/* 健康状态指示点 */}
+                      <span title={dotTitle} style={{
+                        width: 8, height: 8, borderRadius: '50%', background: dotColor,
+                        flexShrink: 0, cursor: 'default',
+                        boxShadow: isError ? '0 0 0 2px #ffcdd2' : isWarning ? '0 0 0 2px #ffe0b2' : 'none',
                       }} />
-                    </button>
-                    {!feed.isBuiltin && (
-                      <button onClick={() => deleteFeed(feed.id)} style={{ background: 'none', border: 'none', color: '#e57373', cursor: 'pointer', fontSize: 14, padding: 4 }}>✕</button>
-                    )}
-                  </div>
-                ))}
+                      <div style={{ flex: 1, fontWeight: 500 }}>{feed.name}</div>
+                      <div style={{ fontSize: 11, color: '#888', background: '#f5f3ee', padding: '2px 8px', borderRadius: 4 }}>{feed.topic}</div>
+                      {/* 错误信息（仅异常源显示） */}
+                      {isError && feed.lastError && (
+                        <div style={{ fontSize: 11, color: '#e57373', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={feed.lastError}>
+                          {feed.lastError.replace('Error: ', '')}
+                        </div>
+                      )}
+                      {!isError && (
+                        <div style={{ fontSize: 11, color: '#aaa', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{feed.url}</div>
+                      )}
+                      {/* Toggle */}
+                      <button onClick={() => toggleFeed(feed.id, !feed.enabled)} style={{
+                        width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer',
+                        background: feed.enabled ? '#639922' : '#ccc',
+                        position: 'relative', transition: 'background 0.15s', flexShrink: 0,
+                      }}>
+                        <span style={{
+                          position: 'absolute', width: 16, height: 16, borderRadius: '50%', background: '#fff',
+                          top: 2, left: feed.enabled ? 18 : 2, transition: 'left 0.15s',
+                        }} />
+                      </button>
+                      {!feed.isBuiltin && (
+                        <button onClick={() => deleteFeed(feed.id)} style={{ background: 'none', border: 'none', color: '#e57373', cursor: 'pointer', fontSize: 14, padding: 4 }}>✕</button>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

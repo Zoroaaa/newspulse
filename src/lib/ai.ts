@@ -1,8 +1,7 @@
 import { db } from './db'
 import { config } from './schema'
-import { eq } from 'drizzle-orm'
 
-interface AIConfig {
+export interface AIConfig {
   provider: string
   model: string
   apiKey: string
@@ -30,8 +29,8 @@ function getLengthInstruction(length: string): string {
   return '100字以内'
 }
 
-async function callAI(systemPrompt: string, userContent: string, timeoutMs = 30000): Promise<string> {
-  const cfg = await getAIConfig()
+// 核心调用，接受预加载的 cfg，不再内部查 DB
+async function callAIWithConfig(cfg: AIConfig, systemPrompt: string, userContent: string, timeoutMs = 30000): Promise<string> {
   if (!cfg.apiKey) throw new Error('AI API Key not configured')
 
   const baseUrl = cfg.baseUrl || (cfg.provider === 'anthropic'
@@ -58,33 +57,44 @@ async function callAI(systemPrompt: string, userContent: string, timeoutMs = 300
     return data.content?.[0]?.text || ''
   }
 
-  // OpenAI compatible
   const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${cfg.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: cfg.model,
-        max_tokens: 1024,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
-        ],
-      }),
-      signal: AbortSignal.timeout(timeoutMs),
-    })
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${cfg.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: cfg.model,
+      max_tokens: 1024,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
+      ],
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  })
   const data = await res.json()
   return data.choices?.[0]?.message?.content || ''
 }
 
-export async function generateSummary(title: string, rawText: string): Promise<{ summary: string; titleZh: string }> {
+// 单次场景的便捷包装（自动加载 config）
+async function callAI(systemPrompt: string, userContent: string, timeoutMs = 30000): Promise<string> {
   const cfg = await getAIConfig()
-  const lengthInstruction = getLengthInstruction(cfg.summaryLength)
-  const langInstruction = cfg.summaryLang === 'zh' ? '用中文输出' : 'output in English'
+  return callAIWithConfig(cfg, systemPrompt, userContent, timeoutMs)
+}
 
-  const result = await callAI(
+// cfg 可选传入：批量爬取时由外部传入预加载的 config，避免每篇文章查一次 DB
+export async function generateSummary(
+  title: string,
+  rawText: string,
+  cfg?: AIConfig
+): Promise<{ summary: string; titleZh: string }> {
+  const resolvedCfg = cfg ?? await getAIConfig()
+  const lengthInstruction = getLengthInstruction(resolvedCfg.summaryLength)
+  const langInstruction = resolvedCfg.summaryLang === 'zh' ? '用中文输出' : 'output in English'
+
+  const result = await callAIWithConfig(
+    resolvedCfg,
     `你是新闻摘要助手。${langInstruction}。严格返回JSON格式：{"titleZh":"...","summary":"..."}，不要其他内容。`,
     `标题：${title}\n\n正文：${rawText.slice(0, 2000)}\n\n要求：翻译标题为中文（titleZh），生成${lengthInstruction}的摘要（summary）。`
   )
@@ -118,9 +128,13 @@ export async function translateTitles(titles: { id: number; title: string }[]): 
     batches.push(titles.slice(i, i + BATCH_SIZE))
   }
 
+  // 只查一次 config，所有 batch 复用
+  const cfg = await getAIConfig()
+
   const results = await Promise.all(
     batches.map(async (batch) => {
-      const result = await callAI(
+      const result = await callAIWithConfig(
+        cfg,
         '你是翻译助手。将英文标题翻译为中文。严格返回JSON格式：{"translations":[{"id":1,"zh":"..."},...]}，不要其他内容。',
         JSON.stringify(batch.map(t => ({ id: t.id, en: t.title }))),
         60000
