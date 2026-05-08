@@ -463,6 +463,10 @@ export default function AdminPage() {
                     {topics.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                   <p style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>杂志模式下首页头条区域显示的分组，保存后生效。</p>
+                  <button onClick={saveConfig} disabled={saving} style={{
+                    marginTop: 8, padding: '7px 20px', background: '#D85A30', color: '#fff', border: 'none',
+                    borderRadius: 8, fontSize: 13, cursor: saving ? 'default' : 'pointer', fontFamily: 'Georgia, serif',
+                  }}>{saving ? '保存中...' : '保存配置'}</button>
                 </div>
                 {topics.map(topic => {
                   const count = feeds.filter(f => f.topic === topic).length
