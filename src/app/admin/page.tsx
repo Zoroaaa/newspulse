@@ -28,6 +28,7 @@ export default function AdminPage() {
   const [newFeed, setNewFeed] = useState({ name: '', url: '', topic: '' })
   const [saving, setSaving] = useState(false)
   const [crawling, setCrawling] = useState(false)
+  const [initingDB, setInitingDB] = useState(false)
   const [msg, setMsg] = useState('')
   const [crawlLog, setCrawlLog] = useState<string[]>([])
   const [importing, setImporting] = useState(false)
@@ -86,6 +87,28 @@ export default function AdminPage() {
     setSaving(false)
     setMsg('保存成功')
     setTimeout(() => setMsg(''), 2000)
+  }
+
+  const triggerInitDB = async () => {
+    setInitingDB(true)
+    setMsg('')
+    try {
+      const res = await fetch('/api/admin-init-db', { method: 'POST' })
+      const data = await res.json()
+      if (data.ok) {
+        setMsg('数据库初始化完成')
+        fetch('/api/feeds').then(r => r.json()).then(setFeeds)
+        fetch('/api/articles?count=true').then(r => r.json()).then(d => {
+          setStats(prev => ({ ...prev, articles: d.total || 0 }))
+        })
+      } else {
+        setMsg(`初始化失败：${data.error}`)
+      }
+    } catch {
+      setMsg('初始化失败')
+    }
+    setInitingDB(false)
+    setTimeout(() => setMsg(''), 5000)
   }
 
   const triggerCrawl = async () => {
@@ -280,11 +303,17 @@ export default function AdminPage() {
                 </div>
               )}
               <div style={{ background: '#fff', border: '0.5px solid #e0ddd6', borderRadius: 10, padding: '1.25rem' }}>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: '1rem' }}>手动触发抓取</div>
-                <button onClick={triggerCrawl} disabled={crawling} style={{
-                  padding: '8px 20px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 8,
-                  fontSize: 13, cursor: crawling ? 'default' : 'pointer', fontFamily: 'Georgia, serif',
-                }}>{crawling ? '抓取中...' : '立即抓取所有源'}</button>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: '1rem' }}>运维操作</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={triggerCrawl} disabled={crawling} style={{
+                    padding: '8px 20px', background: '#D85A30', color: '#fff', border: 'none', borderRadius: 8,
+                    fontSize: 13, cursor: crawling ? 'default' : 'pointer', fontFamily: 'Georgia, serif',
+                  }}>{crawling ? '抓取中...' : '立即抓取所有源'}</button>
+                  <button onClick={triggerInitDB} disabled={initingDB} style={{
+                    padding: '8px 20px', background: '#185FA5', color: '#fff', border: 'none', borderRadius: 8,
+                    fontSize: 13, cursor: initingDB ? 'default' : 'pointer', fontFamily: 'Georgia, serif',
+                  }}>{initingDB ? '初始化中...' : '初始化数据库'}</button>
+                </div>
                 {crawlLog.length > 0 && (
                   <div style={{
                     marginTop: '1rem', padding: '10px 12px', borderRadius: 8,

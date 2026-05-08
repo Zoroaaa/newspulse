@@ -623,13 +623,14 @@ export default function HomePage() {
           background: 'var(--bg-card)',
           borderBottom: '1px solid var(--border)',
           position: 'sticky', top: 52, zIndex: 40,
+          width: '100%',
           overflowX: 'auto',
           WebkitOverflowScrolling: 'touch',
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
         }}>
           <style>{`nav::-webkit-scrollbar { display: none; }`}</style>
-          <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 1rem', display: 'flex', gap: 2, height: 48, alignItems: 'center' }}>
+          <div style={{ maxWidth: 960, margin: '0 auto', padding: '0 1rem', display: 'flex', gap: 2, height: 48, alignItems: 'center', minWidth: 'max-content' }}>
             <button onClick={() => { setShowBookmarks(!showBookmarks); setShowSearch(false) }} style={{
               padding: '6px 14px',
               borderRadius: 20,
