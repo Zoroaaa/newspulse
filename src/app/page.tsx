@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ArticlePanel from '@/components/ArticlePanel'
+import HeadlineCarousel from '@/components/HeadlineCarousel'
 import { isSameEvent } from '@/lib/similarity'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
@@ -78,6 +79,21 @@ export default function HomePage() {
   const [screenSize, setScreenSize] = useState<'mobile' | 'tablet' | 'desktop' | 'large'>('desktop')
   const [mounted, setMounted] = useState(false)
   const [trendingArticles, setTrendingArticles] = useState<Article[]>([])
+
+  // 响应式容器配置 - 核心改进
+  const containerStyle = {
+    width: isMobile ? '100%' : screenSize === 'tablet' ? '98%' : screenSize === 'desktop' ? '96%' : '95%',
+    margin: '0 auto',
+    padding: isMobile ? '0 1rem' : screenSize === 'tablet' ? '0 1.5rem' : '0 2rem',
+  }
+
+  // 双栏布局配置（仅大屏）
+  const mainGridStyle = !isMobile && screenSize === 'large' ? {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 2.5fr) minmax(0, 1fr)',
+    gap: '2rem',
+    alignItems: 'start',
+  } : undefined
   const [readIds, setReadIds] = useState<Set<number>>(new Set())
   const [focusedId, setFocusedId] = useState<number | null>(null)
   const [heroTopic, setHeroTopic] = useState<string>('')
@@ -389,9 +405,9 @@ export default function HomePage() {
     }
   }
 
-  const gridCols = isMobile ? 'repeat(1,1fr)' : screenSize === 'tablet' ? 'repeat(2,1fr)' : style === 'card' ? 'repeat(3,1fr)' : screenSize === 'large' ? 'repeat(4,1fr)' : 'repeat(3,1fr)'
-  const photoCols = isMobile ? 'repeat(1,1fr)' : screenSize === 'tablet' ? 'repeat(2,1fr)' : screenSize === 'large' ? 'repeat(4,1fr)' : 'repeat(3,1fr)'
-  const trendingCols = isMobile ? 'repeat(1,1fr)' : screenSize === 'tablet' ? 'repeat(3,1fr)' : screenSize === 'large' ? 'repeat(5,1fr)' : 'repeat(5,1fr)'
+  const gridCols = isMobile ? 'repeat(1,1fr)' : `repeat(auto-fill, minmax(${screenSize === 'large' ? '300px' : '280px'}, 1fr))`
+  const photoCols = isMobile ? 'repeat(1,1fr)' : `repeat(auto-fill, minmax(${screenSize === 'large' ? '250px' : '220px'}, 1fr))`
+  const trendingCols = isMobile ? 'repeat(1,1fr)' : screenSize === 'tablet' ? 'repeat(3,1fr)' : `repeat(auto-fill, minmax(${screenSize === 'large' ? '200px' : '180px'}, 1fr))`
   const topics = Object.keys(articles)
   const heroTopicKey = (heroTopic && topics.includes(heroTopic)) ? heroTopic : topics[0] || ''
   const topArticle = heroTopicKey ? articles[heroTopicKey]?.[0] : null
@@ -533,7 +549,7 @@ export default function HomePage() {
         borderBottom: '1px solid var(--border)',
         position: 'sticky', top: 0, zIndex: 50,
       }}>
-        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 2rem', height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ ...containerStyle, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.5 }}>
             News<span style={{ color: '#D85A30' }}>Pulse</span>
           </div>
@@ -655,7 +671,7 @@ export default function HomePage() {
           msOverflowStyle: 'none',
         }}>
           <style>{`nav::-webkit-scrollbar { display: none; }`}</style>
-          <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 2rem', display: 'flex', gap: 2, height: 48, alignItems: 'center', justifyContent: 'flex-start' }}>
+          <div style={{ ...containerStyle, display: 'flex', gap: 2, height: 48, alignItems: 'center', justifyContent: 'flex-start' }}>
             <button onClick={() => { setShowBookmarks(!showBookmarks); setShowSearch(false) }} style={{
               padding: '6px 14px',
               borderRadius: 20,
@@ -728,7 +744,7 @@ export default function HomePage() {
       )}
 
       {loading ? (
-        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.5rem 2rem' }}>
+        <div style={{ ...containerStyle, padding: isMobile ? '1.5rem 1rem' : '1.5rem 2rem' }}>
           <div className="skeleton" style={{ height: 28, width: 120, marginBottom: 16 }} />
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: 12 }}>
             {[1,2,3,4,5,6].map(i => (
@@ -742,7 +758,13 @@ export default function HomePage() {
           <p style={{ fontSize: 13 }}>请前往 /admin 配置 AI 并触发抓取</p>
         </div>
       ) : (
-        <main style={{ maxWidth: '1400px', margin: '0 auto', padding: isMobile ? '1rem' : '1.5rem 2rem' }}>
+        <main style={{ ...containerStyle, padding: isMobile ? '1rem' : '2rem 2rem' }}>
+
+          {/* 双栏布局：左侧主内容 + 右侧智能边栏 */}
+          <div style={mainGridStyle || {}}>
+
+            {/* ====== 左侧主内容区 (70%) ====== */}
+            <div className="content-area">
 
           {/* Search Results */}
           {showSearch && searchQuery && (
@@ -852,6 +874,15 @@ export default function HomePage() {
             </div>
           )}
 
+          {/* Headline Carousel - 头条轮播（仅桌面端） */}
+          {!isMobile && trendingArticles.length > 0 && !showSearch && !showBookmarks && (
+            <HeadlineCarousel
+              articles={trendingArticles.slice(0, 9)}
+              translated={translated}
+              onSelect={(article) => { setSelected(article); markRead(article.id) }}
+            />
+          )}
+
           {/* Topic sections */}
           {topics.map((topic) => {
             const allArticles = articles[topic] || []
@@ -897,6 +928,98 @@ export default function HomePage() {
               </section>
             )
           })}
+
+            </div>{/* End content-area */}
+
+            {/* ====== 右侧智能边栏 (30%) - 仅大屏显示 ====== */}
+            {!isMobile && screenSize === 'large' && (
+              <aside className="smart-sidebar" style={{ position: 'sticky', top: 110, height: 'fit-content' }}>
+
+                {/* Widget 1: 今日热读排行 */}
+                <div className="widget" style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid #D85A30', letterSpacing: 0.5 }}>📈 今日热读</h3>
+                  <div>
+                    {trendingArticles.slice(0, 5).map((article, i) => (
+                      <div key={i} onClick={() => { setSelected(article); markRead(article.id) }} style={{
+                        display: 'flex', gap: 10, padding: '8px 0',
+                        borderBottom: i < 4 ? '1px solid var(--border)' : 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; (e.currentTarget.firstChild as HTMLElement).style.paddingLeft = '8px' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; (e.currentTarget.firstChild as HTMLElement).style.paddingLeft = '0' }}
+                      >
+                        <span style={{ fontSize: 18, fontWeight: 800, color: i < 3 ? '#D85A30' : 'var(--border)', minWidth: 20, transition: 'padding-left 0.2s' }}>{i + 1}</span>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, marginBottom: 2 }}>
+                            {(translated && article.titleZh ? article.titleZh : article.title).length > 45 ? (translated && article.titleZh ? article.titleZh : article.title).slice(0, 45) + '...' : (translated && article.titleZh ? article.titleZh : article.title)}
+                          </h4>
+                          <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{article.source}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Widget 2: 趋势话题云 */}
+                <div className="widget" style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid #D85A30', letterSpacing: 0.5 }}>🔥 趋势话题</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {topics.slice(0, 9).map((topic, i) => (
+                      <button key={topic} onClick={() => scrollToTopic(topic)} style={{
+                        padding: '6px 14px',
+                        borderRadius: 20,
+                        background: activeTopic === topic ? getTopicColor(topic) : 'var(--bg-hover)',
+                        color: activeTopic === topic ? '#fff' : 'var(--text-muted)',
+                        fontSize: Math.max(11, 14 - i * 0.3),
+                        fontWeight: i < 3 ? 600 : 400,
+                        cursor: 'pointer',
+                        border: 'none',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={e => { if (activeTopic !== topic) e.currentTarget.style.background = 'var(--bg-card)' }}
+                      onMouseLeave={e => { if (activeTopic !== topic) e.currentTarget.style.background = 'var(--bg-hover)' }}
+                      >
+                        #{topic}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Widget 3: 快捷操作 */}
+                <div className="widget">
+                  <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid #D85A30', letterSpacing: 0.5 }}>⚡ 快捷操作</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button onClick={handleTranslateAll} disabled={translating || translated} style={{
+                      padding: '10px 14px', borderRadius: 8,
+                      border: '0.5px solid var(--border)',
+                      background: translated ? 'var(--success-bg)' : 'transparent',
+                      color: translated ? 'var(--success-text)' : 'var(--text-muted)',
+                      cursor: translating || translated ? 'default' : 'pointer',
+                      fontSize: 13, fontFamily: 'Georgia, serif',
+                      textAlign: 'left', transition: 'all 0.2s',
+                    }}>
+                      {translating ? '🔄 翻译中...' : translated ? '✅ 已翻译' : '🌐 翻译所有标题'}
+                    </button>
+                    <button onClick={() => setShowBookmarks(!showBookmarks)} style={{
+                      padding: '10px 14px', borderRadius: 8,
+                      border: '0.5px solid var(--border)',
+                      background: showBookmarks ? 'var(--bg-hover)' : 'transparent',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: 13, fontFamily: 'Georgia, serif',
+                      textAlign: 'left', transition: 'all 0.2s',
+                    }}>
+                      ⭐ 查看收藏 ({bookmarks.size})
+                    </button>
+                  </div>
+                </div>
+
+              </aside>
+            )}
+
+          </div>{/* End mainGridStyle */}
+
         </main>
       )}
 
