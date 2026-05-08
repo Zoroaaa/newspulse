@@ -4,15 +4,18 @@ import { useRef } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 
+// 使用与 page.tsx 一致的完整 Article 类型
 interface Article {
   id: number
   title: string
   titleZh: string | null
   url: string
+  summary: string | null
   imageUrl: string | null
   source: string
   topic: string
   publishedAt: string | null
+  createdAt: string
 }
 
 interface Props {
