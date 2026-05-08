@@ -662,21 +662,6 @@ export default function HomePage() {
               </button>
             ))}
 
-            <div style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 2px' }} />
-
-            <button onClick={handleTranslateAll} disabled={translating || translated} style={{
-              padding: '4px 10px',
-              borderRadius: 6,
-              fontSize: 12,
-              fontFamily: 'Georgia, serif',
-              border: '0.5px solid var(--border)',
-              background: translated ? 'var(--success-bg)' : 'transparent',
-              color: translated ? 'var(--success-text)' : 'var(--text-muted)',
-              cursor: translating || translated ? 'default' : 'pointer',
-            }}>
-              {translating ? '翻译中...' : translated ? '✓ 已翻译' : '翻译'}
-            </button>
-
             {isMobile && (
               <button onClick={showSearch ? closeSearch : openSearch} style={{
                 padding: '4px 8px', borderRadius: 6, fontSize: 14,
@@ -702,23 +687,6 @@ export default function HomePage() {
         }}>
           <style>{`nav::-webkit-scrollbar { display: none; }`}</style>
           <div style={{ ...containerStyle, display: 'flex', gap: 2, height: 48, alignItems: 'center', justifyContent: 'flex-start' }}>
-            <button onClick={() => { setShowBookmarks(!showBookmarks); setShowSearch(false) }} style={{
-              padding: '6px 14px',
-              borderRadius: 20,
-              fontSize: 13,
-              fontFamily: 'Georgia, serif',
-              border: 'none',
-              whiteSpace: 'nowrap',
-              background: showBookmarks ? '#D85A30' : 'transparent',
-              color: showBookmarks ? '#fff' : 'var(--text-muted)',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              fontWeight: showBookmarks ? 600 : 400,
-              flexShrink: 0,
-            }}>
-              ★ <span style={{ fontSize: 11, marginLeft: 4, opacity: showBookmarks ? 0.8 : 0.5 }}>{bookmarks.size}</span>
-            </button>
-            <div style={{ width: 1, height: 24, background: 'var(--border)', margin: '0 4px', flexShrink: 0 }} />
             {topics.map(t => {
               const count = articles[t]?.length || 0
               const color = getTopicColor(t)
@@ -1019,7 +987,7 @@ export default function HomePage() {
                 {/* Widget 3: 快捷操作 */}
                 <div className="widget">
                   <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid #D85A30', letterSpacing: 0.5 }}>⚡ 快捷操作</h3>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
                     <button onClick={handleTranslateAll} disabled={translating || translated} style={{
                       padding: '10px 14px', borderRadius: 8,
                       border: '0.5px solid var(--border)',
@@ -1049,25 +1017,25 @@ export default function HomePage() {
                 {siteStats && (
                   <div className="widget" style={{ marginTop: '1.5rem' }}>
                     <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, paddingBottom: 8, borderBottom: '2px solid #D85A30', letterSpacing: 0.5 }}>📊 站点统计</h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>今日访问</span>
-                        <span style={{ fontSize: 16, fontWeight: 600, color: '#D85A30' }}>{siteStats.today}</span>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px', background: 'var(--bg-hover)', borderRadius: 8 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>今日</span>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: '#D85A30' }}>{siteStats.today}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>昨日访问</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px', background: 'var(--bg-hover)', borderRadius: 8 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>昨日</span>
                         <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{siteStats.yesterday}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>本周访问</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px', background: 'var(--bg-hover)', borderRadius: 8 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>本周</span>
                         <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{siteStats.week}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>总访问</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px', background: 'var(--bg-hover)', borderRadius: 8 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>累计</span>
                         <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>{siteStats.total}</span>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>较昨日</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px', background: 'var(--bg-hover)', borderRadius: 8, gridColumn: 'span 2' }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>较昨日</span>
                         <span style={{ fontSize: 12, color: siteStats.trend > 0 ? '#10B981' : siteStats.trend < 0 ? '#EF4444' : 'var(--text-faint)', fontWeight: 500 }}>
                           {siteStats.trend > 0 ? '+' : ''}{siteStats.trend.toFixed(1)}%
                         </span>
