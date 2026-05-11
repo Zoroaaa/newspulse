@@ -59,6 +59,9 @@ export async function initDB() {
   await db.run(sql`CREATE INDEX IF NOT EXISTS idx_article_views_viewed_at
     ON article_views (viewed_at)`)
 
+  await db.run(sql`CREATE INDEX IF NOT EXISTS idx_article_views_article_viewed
+    ON article_views (article_id, viewed_at)`)
+
   await db.run(sql`CREATE TABLE IF NOT EXISTS site_access_stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     visited_at INTEGER NOT NULL DEFAULT (unixepoch()),

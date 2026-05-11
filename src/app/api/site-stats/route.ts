@@ -1,47 +1,37 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { siteAccessStats } from '@/lib/schema'
-import { sql, desc } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 
 export async function GET() {
   try {
-    const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const yesterdayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
-    
-    const allVisits = await db.select({ visitedAt: siteAccessStats.visitedAt }).from(siteAccessStats)
-    
-    const todayVisits = allVisits.filter(v => v.visitedAt && new Date(v.visitedAt) >= todayStart).length
-    const yesterdayVisits = allVisits.filter(v => v.visitedAt && new Date(v.visitedAt) >= yesterdayStart && new Date(v.visitedAt) < todayStart).length
-    const weekVisits = allVisits.filter(v => v.visitedAt && new Date(v.visitedAt) >= weekStart).length
-    const totalVisits = allVisits.length
-    
-    const trend = yesterdayVisits > 0 ? ((todayVisits - yesterdayVisits) / yesterdayVisits * 100).toFixed(1) : null
-    
-    const recentVisits = await db
-      .select({ visitedAt: siteAccessStats.visitedAt })
-      .from(siteAccessStats)
-      .orderBy(desc(siteAccessStats.visitedAt))
-      .limit(10)
-    
+    const now = Math.floor(Date.now() / 1000)
+    const todayStart = now - (now % 86400)          // 今日 00:00 UTC
+    const yesterdayStart = todayStart - 86400
+    const weekStart = todayStart - 86400 * 7
+
+    const [row] = await db.all(sql`
+      SELECT
+        COUNT(*)                                                        AS total,
+        COUNT(*) FILTER (WHERE visited_at >= ${todayStart})            AS today,
+        COUNT(*) FILTER (WHERE visited_at >= ${yesterdayStart}
+                           AND visited_at <  ${todayStart})            AS yesterday,
+        COUNT(*) FILTER (WHERE visited_at >= ${weekStart})             AS week
+      FROM site_access_stats
+    `) as any[]
+
+    const today     = Number(row.today)
+    const yesterday = Number(row.yesterday)
+    const trend     = yesterday > 0 ? (today - yesterday) / yesterday * 100 : 0
+
     return NextResponse.json({
-      total: totalVisits,
-      today: todayVisits,
-      yesterday: yesterdayVisits,
-      week: weekVisits,
-      trend: trend ? Number(trend) : 0,
-      recentVisits: recentVisits.map(v => v.visitedAt),
+      total:     Number(row.total),
+      today,
+      yesterday,
+      week:      Number(row.week),
+      trend:     Math.round(trend * 10) / 10,
     })
   } catch (error) {
     console.error('Error fetching site stats:', error)
-    return NextResponse.json({ 
-      total: 0, 
-      today: 0, 
-      yesterday: 0, 
-      week: 0, 
-      trend: 0,
-      recentVisits: [] 
-    }, { status: 200 })
+    return NextResponse.json({ total: 0, today: 0, yesterday: 0, week: 0, trend: 0 })
   }
 }

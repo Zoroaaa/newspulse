@@ -489,7 +489,10 @@ export default function HomePage() {
       return (
         <div key={a.id} ref={setCardRef(a.id)} tabIndex={-1} onClick={handleClick} style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', position: 'relative', aspectRatio: '16/10', background: 'var(--border)', outline: 'none', boxShadow: focusRing }}>
           {a.imageUrl ? (
-            <img src={proxyImage(a.imageUrl)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isRead ? 0.7 : 1 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <img src={proxyImage(a.imageUrl)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isRead ? 0.7 : 1 }} onError={(e) => {
+                const img = e.target as HTMLImageElement
+                if (img.src !== a.imageUrl) { img.src = a.imageUrl! } else { img.style.display = 'none' }
+              }} />
           ) : (
             <div style={{ width: '100%', height: '100%', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{a.source}</span>
@@ -846,7 +849,10 @@ export default function HomePage() {
                   <img src={proxyImage(topArticle.imageUrl)!} alt="" style={{
                     width: '100%', height: 180, objectFit: 'cover',
                     borderRadius: 8, marginBottom: 12,
-                  }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  }} onError={(e) => {
+                    const img = e.target as HTMLImageElement
+                    if (img.src !== topArticle.imageUrl) { img.src = topArticle.imageUrl! } else { img.style.display = 'none' }
+                  }} />
                 )}
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: '#D85A30', marginBottom: 6 }}>{topArticle.topic}</div>
                 <h2 style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.3, marginBottom: 10, color: 'var(--text-primary)' }}>
