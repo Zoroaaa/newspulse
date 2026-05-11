@@ -30,7 +30,7 @@ function getLengthInstruction(length: string): string {
 }
 
 // 核心调用，接受预加载的 cfg，不再内部查 DB
-async function callAIWithConfig(cfg: AIConfig, systemPrompt: string, userContent: string, timeoutMs = 30000): Promise<string> {
+async function callAIWithConfig(cfg: AIConfig, systemPrompt: string, userContent: string, timeoutMs = 30000, maxTokens = 1024): Promise<string> {
   if (!cfg.apiKey) throw new Error('AI API Key not configured')
 
   const baseUrl = cfg.baseUrl || (cfg.provider === 'anthropic'
@@ -47,7 +47,7 @@ async function callAIWithConfig(cfg: AIConfig, systemPrompt: string, userContent
       },
       body: JSON.stringify({
         model: cfg.model,
-        max_tokens: 1024,
+        max_tokens: maxTokens,
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }],
       }),
@@ -65,7 +65,7 @@ async function callAIWithConfig(cfg: AIConfig, systemPrompt: string, userContent
     },
     body: JSON.stringify({
       model: cfg.model,
-      max_tokens: 1024,
+      max_tokens: maxTokens,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
@@ -78,9 +78,9 @@ async function callAIWithConfig(cfg: AIConfig, systemPrompt: string, userContent
 }
 
 // 单次场景的便捷包装（自动加载 config）
-async function callAI(systemPrompt: string, userContent: string, timeoutMs = 30000): Promise<string> {
+async function callAI(systemPrompt: string, userContent: string, timeoutMs = 30000, maxTokens = 1024): Promise<string> {
   const cfg = await getAIConfig()
-  return callAIWithConfig(cfg, systemPrompt, userContent, timeoutMs)
+  return callAIWithConfig(cfg, systemPrompt, userContent, timeoutMs, maxTokens)
 }
 
 // cfg 可选传入：批量爬取时由外部传入预加载的 config，避免每篇文章查一次 DB
@@ -110,7 +110,9 @@ export async function generateSummary(
 export async function translateArticle(title: string, content: string): Promise<{ titleZh: string; contentZh: string }> {
   const result = await callAI(
     '你是专业翻译。将新闻内容翻译为中文。严格返回JSON格式：{"titleZh":"...","contentZh":"..."}，不要其他内容。',
-    `标题：${title}\n\n正文：${content.slice(0, 6000)}`
+    `标题：${title}\n\n正文：${content}`,
+    60000,  // 长文翻译给更多时间
+    8192    // 足够输出完整译文
   )
 
   try {

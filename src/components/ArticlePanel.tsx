@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { titleSimilarity, findRelated } from '@/lib/similarity'
+import { proxyImage } from '@/lib/proxy'
 
 interface Article {
   id: number
@@ -128,7 +129,7 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
           </h1>
 
           {article.imageUrl && (
-            <img src={article.imageUrl} alt="" style={{ width: '100%', borderRadius: 8, marginBottom: '1rem', maxHeight: 240, objectFit: 'cover' }}
+            <img src={proxyImage(article.imageUrl)!} alt="" style={{ width: '100%', borderRadius: 8, marginBottom: '1rem', maxHeight: 240, objectFit: 'cover' }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
           )}
 

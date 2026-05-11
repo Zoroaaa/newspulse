@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import ArticlePanel from '@/components/ArticlePanel'
 import HeadlineCarousel from '@/components/HeadlineCarousel'
 import { isSameEvent } from '@/lib/similarity'
+import { proxyImage } from '@/lib/proxy'
 import { formatDistanceToNow } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 
@@ -488,7 +489,7 @@ export default function HomePage() {
       return (
         <div key={a.id} ref={setCardRef(a.id)} tabIndex={-1} onClick={handleClick} style={{ cursor: 'pointer', borderRadius: 8, overflow: 'hidden', position: 'relative', aspectRatio: '16/10', background: 'var(--border)', outline: 'none', boxShadow: focusRing }}>
           {a.imageUrl ? (
-            <img src={a.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isRead ? 0.7 : 1 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            <img src={proxyImage(a.imageUrl)!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isRead ? 0.7 : 1 }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
           ) : (
             <div style={{ width: '100%', height: '100%', background: 'var(--bg-hover)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>{a.source}</span>
@@ -842,7 +843,7 @@ export default function HomePage() {
             }}>
               <div style={{ cursor: 'pointer' }} onClick={() => { setSelected(topArticle); markRead(topArticle.id) }}>
                 {topArticle.imageUrl && (
-                  <img src={topArticle.imageUrl} alt="" style={{
+                  <img src={proxyImage(topArticle.imageUrl)!} alt="" style={{
                     width: '100%', height: 180, objectFit: 'cover',
                     borderRadius: 8, marginBottom: 12,
                   }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />

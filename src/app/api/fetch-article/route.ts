@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       text = contentEl.text().replace(/\s+/g, ' ').trim()
     }
 
-    text = text.slice(0, 8000)
+    text = text.slice(0, 30000)
 
     const { titleZh, contentZh } = await translateArticle(title, text)
     return NextResponse.json({ titleZh, contentZh, originalUrl: url })
