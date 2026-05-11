@@ -24,9 +24,10 @@ export async function GET(req: Request) {
   try {
     const upstream = await fetch(target.toString(), {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; NewsPulse/1.0)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'image/*,*/*;q=0.8',
-        'Referer': target.origin,
+        'Referer': `https://${target.hostname}/`,
+        'Origin': `https://${target.hostname}`,
       },
       // Edge Runtime 不支持 AbortSignal.timeout，用 signal + setTimeout 模拟
       signal: AbortSignal.timeout(10000),
