@@ -1,8 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { titleSimilarity, findRelated } from '@/lib/similarity'
+import { findRelated } from '@/lib/similarity'
 import { proxyImage } from '@/lib/proxy'
+import { formatDistanceToNow } from 'date-fns'
+import { zhCN } from 'date-fns/locale'
 
 interface Article {
   id: number
@@ -26,6 +28,13 @@ interface Props {
   similar?: Article[]
 }
 
+function timeAgo(dateStr: string | null) {
+  if (!dateStr) return ''
+  try {
+    return formatDistanceToNow(new Date(dateStr), { locale: zhCN, addSuffix: true })
+  } catch { return '' }
+}
+
 export default function ArticlePanel({ article, translated, bookmarked, onToggleBookmark, onClose, similar }: Props) {
   const [state, setState] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
   const [result, setResult] = useState<{ titleZh: string; contentZh: string } | null>(null)
@@ -33,17 +42,14 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // 重置状态（切换文章时）
     setState('idle')
     setResult(null)
     setRelated([])
 
-    // 拉同topic文章，用shared算法过滤出真正相关（非同一事件）的推荐
     fetch(`/api/articles?topic=${encodeURIComponent(article.topic)}&limit=30`)
       .then(r => r.json())
       .then(data => {
         const rows: Article[] = data.rows || data[article.topic] || []
-        // 同一事件的文章已经在 similar 里了，这里只要"同topic但不同事件"的
         const sameEventIds = new Set((similar || []).map(a => a.id))
         const candidates = rows.filter(a => a.id !== article.id && !sameEventIds.has(a.id))
         setRelated(findRelated(article, candidates, 5))
@@ -60,8 +66,7 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
         body: JSON.stringify({ url: article.url, title: article.title }),
       })
       if (!res.ok) throw new Error('fetch failed')
-      const data = await res.json()
-      setResult(data)
+      setResult(await res.json())
       setState('done')
     } catch {
       setState('error')
@@ -74,159 +79,157 @@ export default function ArticlePanel({ article, translated, bookmarked, onToggle
 
   return (
     <>
-      <div onClick={onClose} style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 100,
-      }} />
+      <div className="panel-overlay" onClick={onClose} />
 
-      <div ref={panelRef} className="slide-in" style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0,
-        width: 'min(560px, 100vw)',
-        background: 'var(--bg-card)',
-        zIndex: 101,
-        display: 'flex', flexDirection: 'column',
-        boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
-        fontFamily: 'Georgia, serif',
-      }}>
+      <div ref={panelRef} className="panel slide-in">
+
         {/* Header */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 20px', borderBottom: '0.5px solid var(--border)', flexShrink: 0,
-        }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, background: 'var(--tag-bg)', color: 'var(--text-muted)', padding: '2px 8px', borderRadius: 4 }}>{article.topic}</span>
-            <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>{article.source}</span>
+        <div className="panel-header">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
+            <span className="panel-topic-tag">{article.topic}</span>
+            <span className="panel-source">{article.source}</span>
             {article.viewCount !== undefined && article.viewCount > 0 && (
-              <span style={{ fontSize: 11, color: 'var(--text-faint)', display: 'flex', alignItems: 'center', gap: 2 }}>
-                <span>👁</span>
-                <span>{article.viewCount}</span>
-              </span>
+              <span className="panel-view-count">· {article.viewCount} 阅</span>
+            )}
+            {article.publishedAt && (
+              <span className="panel-view-count hide-mobile">{timeAgo(article.publishedAt)}</span>
             )}
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button onClick={onToggleBookmark} style={{
-              fontSize: 16, background: 'none', border: 'none', cursor: 'pointer',
-              color: bookmarked ? '#D85A30' : 'var(--text-faint)', padding: '4px 8px',
-            }}>
+
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+            <button onClick={onToggleBookmark}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 18, color: bookmarked ? 'var(--accent)' : 'var(--text-faint)',
+                padding: '4px 6px', transition: 'color 0.15s, transform 0.15s',
+                lineHeight: 1,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.15)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+            >
               {bookmarked ? '★' : '☆'}
             </button>
-            <a href={article.url} target="_blank" rel="noopener noreferrer" style={{
-              fontSize: 12, color: '#D85A30', textDecoration: 'none',
-              padding: '4px 10px', border: '0.5px solid #D85A30', borderRadius: 6,
-            }}>
+            <a href={article.url} target="_blank" rel="noopener noreferrer" className="panel-orig-link">
               原文 ↗
             </a>
-            <button onClick={onClose} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              fontSize: 18, color: 'var(--text-faint)', lineHeight: 1, padding: 4,
-            }}>×</button>
+            <button onClick={onClose} className="panel-close-btn">×</button>
           </div>
         </div>
 
-        {/* Content */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem 1.5rem 2rem' }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.35, marginBottom: '1rem', color: 'var(--text-primary)' }}>
-            {displayTitle}
-          </h1>
+        {/* Scrollable content */}
+        <div className="panel-content">
 
+          {/* Title */}
+          <h1 className="panel-title">{displayTitle}</h1>
+
+          {/* Image */}
           {article.imageUrl && (
-            <img src={proxyImage(article.imageUrl)!} alt="" style={{ width: '100%', borderRadius: 8, marginBottom: '1rem', maxHeight: 240, objectFit: 'cover' }}
-              onError={(e) => {
-                const img = e.target as HTMLImageElement
-                if (img.src !== article.imageUrl) {
-                  img.src = article.imageUrl!
-                } else {
-                  img.style.display = 'none'
-                }
-              }} />
-          )}
-
-          {article.summary && state !== 'done' && (
-            <div style={{
-              background: 'var(--ai-bg)', border: '0.5px solid var(--ai-border)', borderRadius: 8,
-              padding: '12px 16px', marginBottom: '1.5rem',
-            }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.8, color: 'var(--ai-text)', marginBottom: 6 }}>✦ AI 摘要</div>
-              <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--text-primary)', margin: 0 }}>{article.summary}</p>
+            <div style={{ marginBottom: '1.5rem', borderRadius: 10, overflow: 'hidden' }}>
+              <img
+                src={proxyImage(article.imageUrl)!}
+                alt=""
+                style={{ width: '100%', maxHeight: 260, objectFit: 'cover', display: 'block' }}
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement
+                  if (img.src !== article.imageUrl) img.src = article.imageUrl!
+                  else (img.parentElement as HTMLElement).style.display = 'none'
+                }}
+              />
             </div>
           )}
 
+          {/* AI summary */}
+          {article.summary && state !== 'done' && (
+            <div className="panel-ai-box">
+              <div className="panel-ai-label">✦ AI 摘要</div>
+              <p className="panel-ai-text">{article.summary}</p>
+            </div>
+          )}
+
+          {/* Translate CTA */}
           {state === 'idle' && (
-            <button onClick={handleTranslate} style={{
-              width: '100%', padding: '12px', borderRadius: 8,
-              background: '#D85A30', color: '#fff', border: 'none',
-              fontSize: 14, fontWeight: 600, cursor: 'pointer',
-              fontFamily: 'Georgia, serif',
-            }}>
+            <button onClick={handleTranslate} className="panel-translate-btn">
               AI 翻译全文
             </button>
           )}
 
           {state === 'loading' && (
-            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-faint)', fontSize: 14 }}>
-              正在抓取并翻译全文...
+            <div style={{
+              padding: '2.5rem',
+              textAlign: 'center',
+              color: 'var(--text-faint)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              letterSpacing: '0.06em',
+            }}>
+              正在抓取并翻译···
             </div>
           )}
 
           {state === 'error' && (
-            <div style={{ background: 'var(--error-bg)', border: '0.5px solid var(--error-border)', borderRadius: 8, padding: '12px 16px', color: 'var(--error-text)', fontSize: 13 }}>
-              抓取失败，该网站可能限制了访问。<br />
-              <a href={article.url} target="_blank" rel="noopener noreferrer" style={{ color: '#D85A30' }}>点击前往原文 ↗</a>
+            <div style={{
+              background: 'var(--error-bg)',
+              border: '0.5px solid var(--error-border)',
+              borderRadius: 10,
+              padding: '14px 18px',
+              color: 'var(--error-text)',
+              fontFamily: 'var(--font-body)',
+              fontSize: 14,
+              lineHeight: 1.6,
+            }}>
+              该页面无法访问，可能有防抓取限制。
+              <br />
+              <a href={article.url} target="_blank" rel="noopener noreferrer"
+                style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>
+                前往原文阅读 ↗
+              </a>
             </div>
           )}
 
           {state === 'done' && result && (
-            <div style={{ fontSize: 15, lineHeight: 1.8, color: 'var(--text-secondary)' }}>
+            <div className="panel-body-text">
               {result.contentZh.split('\n').filter(Boolean).map((p, i) => (
-                <p key={i} style={{ marginBottom: '1rem' }}>{p}</p>
+                <p key={i}>{p}</p>
               ))}
             </div>
           )}
 
-          {/* 多源报道：同一事件，不同媒体 */}
+          {/* Multi-source coverage */}
           {similar && similar.length > 0 && (
-            <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '0.5px solid var(--border)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: '#185FA5', marginBottom: 12 }}>
-                多源报道（{similar.length + 1} 家媒体）
-              </div>
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10, padding: '8px 12px', background: 'rgba(24,95,165,0.06)', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{article.source}</span>
-                <span style={{ fontSize: 11, color: '#185FA5' }}>当前来源</span>
+            <div className="panel-section-divider">
+              <div className="multi-source-header">多源报道 · {similar.length + 1} 家媒体</div>
+              <div className="multi-source-current">
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{article.source}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'var(--blue)', textTransform: 'uppercase' }}>当前来源</span>
               </div>
               {similar.map(a => (
-                <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                  padding: '10px 12px',
-                  borderBottom: '0.5px solid var(--border-light)',
-                  textDecoration: 'none', color: 'var(--text-primary)',
-                  borderRadius: 4, gap: 8,
-                }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
+                <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
+                  className="panel-related-item">
+                  <div className="panel-related-title">
                     {translated && a.titleZh ? a.titleZh : a.title}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-faint)', whiteSpace: 'nowrap', paddingTop: 2 }}>{a.source}</div>
+                  <div className="panel-related-source">{a.source}</div>
                 </a>
               ))}
             </div>
           )}
 
-          {/* 相关文章：同topic不同事件 */}
+          {/* Related articles */}
           {related.length > 0 && (
-            <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '0.5px solid var(--border)' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 12 }}>相关文章</div>
+            <div className="panel-section-divider">
+              <div className="panel-section-label">相关文章</div>
               {related.map(a => (
-                <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer" style={{
-                  display: 'block', padding: '10px 0',
-                  borderBottom: '0.5px solid var(--border-light)',
-                  textDecoration: 'none', color: 'var(--text-primary)',
-                }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, marginBottom: 2 }}>
+                <a key={a.id} href={a.url} target="_blank" rel="noopener noreferrer"
+                  className="panel-related-item">
+                  <div className="panel-related-title">
                     {translated && a.titleZh ? a.titleZh : a.title}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-faint)' }}>{a.source}</div>
+                  <div className="panel-related-source">{a.source}</div>
                 </a>
               ))}
             </div>
           )}
+
         </div>
       </div>
     </>
