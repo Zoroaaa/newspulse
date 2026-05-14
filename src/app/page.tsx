@@ -55,6 +55,13 @@ function estimateReadTime(text: string | null): string {
   return `${minutes} min`
 }
 
+function formatApproxCount(n: number): string {
+  if (n < 10) return `${n}+`
+  if (n < 100) return `${Math.floor(n / 10) * 10}+`
+  if (n < 1000) return `${Math.floor(n / 100) * 100}+`
+  return `${Math.floor(n / 1000)}k+`
+}
+
 // View style icons as text glyphs
 const VIEW_ICONS: Record<ViewStyle, string> = {
   magazine: '⊞',
@@ -89,7 +96,7 @@ export default function HomePage() {
   const [mounted, setMounted] = useState(false)
   const [trendingArticles, setTrendingArticles] = useState<Article[]>([])
   const [siteStats, setSiteStats] = useState<{
-    total: number; today: number; yesterday: number; week: number; trend: number
+    total: number; articleCount: number; today: number; yesterday: number; week: number; trend: number
   } | null>(null)
   const [readIds, setReadIds] = useState<Set<number>>(new Set())
   const [focusedId, setFocusedId] = useState<number | null>(null)
@@ -543,7 +550,7 @@ export default function HomePage() {
                 fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-faint)',
                 letterSpacing: '0.04em', borderLeft: '1px solid var(--border)', paddingLeft: 14,
               }}>
-                {siteStats.total.toLocaleString()} 篇文章
+                {formatApproxCount(siteStats.articleCount)} 篇文章
               </span>
             )}
           </div>

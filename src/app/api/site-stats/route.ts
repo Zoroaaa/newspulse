@@ -19,19 +19,22 @@ export async function GET() {
       FROM site_access_stats
     `) as any[]
 
+    const [articleRow] = await db.all(sql`SELECT COUNT(*) AS count FROM articles`) as any[]
+
     const today     = Number(row.today)
     const yesterday = Number(row.yesterday)
     const trend     = yesterday > 0 ? (today - yesterday) / yesterday * 100 : 0
 
     return NextResponse.json({
-      total:     Number(row.total),
+      total:        Number(row.total),
+      articleCount: Number(articleRow.count),
       today,
       yesterday,
-      week:      Number(row.week),
-      trend:     Math.round(trend * 10) / 10,
+      week:         Number(row.week),
+      trend:        Math.round(trend * 10) / 10,
     })
   } catch (error) {
     console.error('Error fetching site stats:', error)
-    return NextResponse.json({ total: 0, today: 0, yesterday: 0, week: 0, trend: 0 })
+    return NextResponse.json({ total: 0, articleCount: 0, today: 0, yesterday: 0, week: 0, trend: 0 })
   }
 }
